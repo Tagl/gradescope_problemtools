@@ -1,4 +1,4 @@
-
+import functools
 import subprocess
 import sys
 import unittest
@@ -47,65 +47,79 @@ def limit_virtual_memory(memory_limit):
 
 class TestProblemMeta(type):
     def __new__(mcs, name, bases, dictionary, problem_name, submission_file):
+        EXIT_AC = 42
+        EXIT_WA = 43
         PROBLEMS_DIR = Path('problems')
         PROBLEM_DIR = PROBLEMS_DIR / problem_name
         PROBLEM_YAML = PROBLEM_DIR / 'problem.yaml'
         DATA_DIR = PROBLEM_DIR / 'data'
         SAMPLE_DIR = DATA_DIR / 'sample'
         SECRET_DIR = DATA_DIR / 'secret'
+        FEEDBACK_DIR = Path('feedback') / problem_name
         TIME_LIMIT_IN_SECONDS = 1
         MEMORY_LIMIT_IN_BYTES = 64 * 1024 * 1024
         OUTPUT_LIMIT_IN_BYTES = 128 * 1024
 
         def _run_testcase(self, test_name: Path):
-            command = ('python', '-u', submission_file)
-
-            calc = subprocess.Popen(command,
-                                    stdin=subprocess.PIPE,
-                                    stdout=subprocess.PIPE,
-                                    encoding='utf8',
-                                    preexec_fn=(lambda: limit_virtual_memory(MEMORY_LIMIT_IN_BYTES)) if sys.platform != "win32" else None)
-            
-            input, output, answer = "", "", ""
+            test_name = Path(test_name)
+            input_data, output, answer = "", "", ""
             input_filename = test_name.with_suffix('.in')
             with open(input_filename) as f:
-                input = f.read()
+                input_data = f.read()
             answer_filename = test_name.with_suffix('.ans')
             with open(answer_filename) as f:
                 answer = f.read()
+
             try:
-                output, err = calc.communicate(input, TIME_LIMIT_IN_SECONDS)
+                command = ('python3', '-u', submission_file)
+
+                calc = subprocess.Popen(command,
+                                        stdin=subprocess.PIPE,
+                                        stdout=subprocess.PIPE,
+                                        encoding='utf8',
+                                        preexec_fn=(lambda: limit_virtual_memory(MEMORY_LIMIT_IN_BYTES)) if sys.platform != "win32" else None)
+                output, err = calc.communicate(input_data, TIME_LIMIT_IN_SECONDS)
                 calc.terminate()
             except subprocess.TimeoutExpired:
                 self.fail(f"Time limit of {TIME_LIMIT_IN_SECONDS} seconds exceeded.")
+            except subprocess.CalledProcessError:
+                self.fail("Runtime error when executing submission")
+            except Exception:
+                self.fail("Unknown error judging submission, contact the instructor")
             
             output_bytes = output.encode()
             if len(output_bytes) > OUTPUT_LIMIT_IN_BYTES:
                 self.fail(f"Output was {len(output_bytes)} bytes which exceeds limit of {OUTPUT_LIMIT_IN_BYTES} bytes.")
 
-            comparison_result = compare_output(output, answer)
-            self.assertTrue(comparison_result, f'Test {input_filename} failed')
-            print(f'Test {input_filename} successful')
+            test_feedback_dir = FEEDBACK_DIR / test_name.stem
+            test_feedback_dir.mkdir(parents=True, exist_ok=True)
+            compare_command = ('./default_validator', input_filename, answer_filename, str(test_feedback_dir))
+            compare = subprocess.Popen(compare_command, stdin=subprocess.PIPE, stdout=subprocess.PIPE, encoding='utf8')
+            compare.communicate(output)
+            if compare.returncode == EXIT_WA:
+                self.fail(f"Wrong answer")
+            elif compare.returncode != EXIT_AC:
+                self.fail(f"Judge error")
 
         samples = [sample.with_suffix('') for sample in SAMPLE_DIR.glob('*.in')]
         secrets = [secret.with_suffix('') for secret in SECRET_DIR.rglob('**/*.in')]
-        for sample in samples:
+        for sample in sorted(samples):
             function_name = f'test_sample_{sample.stem}'
-
+            
             @weight(0)
             @tags("input/output")
-            def f(self):
-                _run_testcase(self, sample)
+            def f(self, test=sample):
+                _run_testcase(self, test)
 
             dictionary[function_name] = f
 
         for secret in secrets:
-            function_name = f'test_sample_{secret.stem}'
-
+            function_name = f'test_secret_{secret.stem}'
+            
             @weight(1)
             @tags("input/output")
-            def f(self):
-                _run_testcase(self, secret)
+            def f(self, test=secret):
+                _run_testcase(self, test)
 
             dictionary[function_name] = f
 
@@ -123,5 +137,3 @@ for problem in Path('problems').iterdir():
 # The dynamically created class will reside in the module
 # after the loop and needs to be manually deleted
 module.__delattr__('C')
-
-print(dir(module))
