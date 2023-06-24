@@ -1,0 +1,9 @@
+#!/usr/bin/env bash
+
+# Set up autograder files
+
+# copy submission files from /autograder/submission/<problem>.py /autograder/source/<problem>_submission.py
+
+cd /autograder/source
+
+python3 run_tests.py
