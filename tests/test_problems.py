@@ -9,33 +9,6 @@ from pathlib import Path
 if sys.platform != "win32":
     import resource
 
-
-def clean_output(x):
-    x_list = [i.strip() for i in x.split('\n') if len(i.strip()) > 0]
-    return x_list
-
-def compare_output(x,y):
-    n = len(y)
-    all_correct = True
-    if len(x) != len(y):
-        print(f'ERROR: Output does not have the correct number of lines, got {len(x)}, should be {len(y)}')
-        all_correct = False
-
-    for i in range(n):
-        if i >= len(x):
-            print(f'ERROR: Line {i}:')
-            print(f'  Yours: <missing>')
-            print(f'  Solution: "{y[i]}"')
-            all_correct = False
-        elif x[i] == y[i]:
-            print(f'Line {i} ok: {x[i]}')
-        else:
-            print(f'ERROR: Line {i}:')
-            print(f'  Yours:    "{x[i]}"')
-            print(f'  Solution: "{y[i]}"')
-            all_correct = False
-    return all_correct
-
 def limit_virtual_memory(memory_limit):
     # The tuple below is of the form (soft limit, hard limit). Limit only
     # the soft part so that the limit can be increased later (setting also
@@ -46,7 +19,8 @@ def limit_virtual_memory(memory_limit):
     resource.setrlimit(resource.RLIMIT_AS, (memory_limit, resource.RLIM_INFINITY))
 
 class TestProblemMeta(type):
-    def __new__(mcs, name, bases, dictionary, problem_name, submission_file):
+    def __new__(mcs, name, bases, dictionary, problem_name):
+        SUBMISSION_FILE = f"{problem_name}_submission.py"
         EXIT_AC = 42
         EXIT_WA = 43
         PROBLEMS_DIR = Path('problems')
@@ -64,6 +38,7 @@ class TestProblemMeta(type):
             test_name = Path(test_name)
             input_data, output, answer = "", "", ""
             input_filename = test_name.with_suffix('.in')
+
             with open(input_filename) as f:
                 input_data = f.read()
             answer_filename = test_name.with_suffix('.ans')
@@ -71,7 +46,7 @@ class TestProblemMeta(type):
                 answer = f.read()
 
             try:
-                command = ('python3', '-u', submission_file)
+                command = ('python3', '-u', SUBMISSION_FILE)
 
                 calc = subprocess.Popen(command,
                                         stdin=subprocess.PIPE,
@@ -129,8 +104,7 @@ module = sys.modules[__name__]
 for problem in Path('problems').iterdir():
     if problem.is_dir():
         class C(unittest.TestCase, metaclass=TestProblemMeta,
-                problem_name=problem.stem,
-                submission_file='problems/area/submissions/accepted/sol.py'):
+                problem_name=problem.stem):
             pass
         module.__setattr__(f'TestProblem_{problem.stem}', C)
 
