@@ -1,3 +1,4 @@
+#!/usr/bin/python3
 a = float(input())
 b = float(input())
-print(f"{round(a*b):.4f}")
+print("{:.4f}".format(round(a*b)))

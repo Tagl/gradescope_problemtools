@@ -1,3 +1,5 @@
+#!/usr/bin/python3
 a = float(input())
 b = float(input())
-print(f"{a*b:.4f}")
+answer = a*b
+print("{:.4f}".format(answer))
