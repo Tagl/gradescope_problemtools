@@ -2,12 +2,6 @@
 
 # Set up autograder files
 
-# copy submission files from /autograder/submission/<problem>.py /autograder/source/<problem>_submission.py
-for file in /autograder/submission/*.py; do
-    destfile=/autograder/source/"${file%.py}"_submission.py
-    cp "$file" "$destfile"
-done;
-
 cd /autograder/source
 
 python3 run_tests.py

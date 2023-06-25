@@ -20,7 +20,7 @@ def limit_virtual_memory(memory_limit):
 
 class TestProblemMeta(type):
     def __new__(mcs, name, bases, dictionary, problem_name):
-        SUBMISSION_FILE = f"{problem_name}_submission.py"
+        SUBMISSION_FILE = f"/autograder/submission/{problem_name}.py"
         EXIT_AC = 42
         EXIT_WA = 43
         PROBLEMS_DIR = Path('problems')
@@ -44,7 +44,8 @@ class TestProblemMeta(type):
             answer_filename = test_name.with_suffix('.ans')
             with open(answer_filename) as f:
                 answer = f.read()
-
+            if not Path(SUBMISSION_FILE).exists():
+                self.fail("Unable to run submission. Is it missing?")
             try:
                 command = ('python3', '-u', SUBMISSION_FILE)
 
@@ -61,6 +62,8 @@ class TestProblemMeta(type):
                 self.fail("Runtime error when executing submission")
             except Exception:
                 self.fail("Unknown error judging submission, contact the instructor")
+            if calc.returncode != 0:
+                self.fail("Runtime error when executing submission")
             
             output_bytes = output.encode()
             if len(output_bytes) > OUTPUT_LIMIT_IN_BYTES:
@@ -106,7 +109,10 @@ for problem in Path('problems').iterdir():
         class C(unittest.TestCase, metaclass=TestProblemMeta,
                 problem_name=problem.stem):
             pass
-        module.__setattr__(f'TestProblem_{problem.stem}', C)
+        class_name = f'TestProblem_{problem.stem}'
+        C.__name__ = class_name
+        C.__qualname__ = class_name
+        module.__setattr__(class_name, C)
 
 # The dynamically created class will reside in the module
 # after the loop and needs to be manually deleted

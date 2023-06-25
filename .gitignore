@@ -1,6 +1,7 @@
 .vs/
 feedback/
 *_submission.py
+autograder.zip
 
 # Byte-compiled / optimized / DLL files
 __pycache__/
