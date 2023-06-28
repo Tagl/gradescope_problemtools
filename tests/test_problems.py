@@ -59,10 +59,11 @@ class TestProblemMeta(type):
         def _run_testcase(self, test_name: Path):
             test_name = Path(test_name)
             input_data, output, answer = "", "", ""
-            input_filename = test_name.with_suffix('.in')
 
+            input_filename = test_name.with_suffix('.in')
             with open(input_filename) as f:
                 input_data = f.read()
+            
             answer_filename = test_name.with_suffix('.ans')
             with open(answer_filename) as f:
                 answer = f.read()
