@@ -2,6 +2,7 @@ import functools
 import subprocess
 import sys
 import unittest
+import yaml
 
 from gradescope_utils.autograder_utils.decorators import weight, tags
 from pathlib import Path
@@ -17,6 +18,25 @@ def limit_virtual_memory(memory_limit):
     if sys.platform == "win32":
         return
     resource.setrlimit(resource.RLIMIT_AS, (memory_limit, resource.RLIM_INFINITY))
+
+class ProblemConfig:
+    def __init__(self, *, name, **kwargs):
+        self.name = name
+        self.type = kwargs.get('type', 'pass-fail')
+        validator_flags = kwargs.get('validator_flags', "")
+        output_validator_flags = kwargs.get('output_validator_flags', "")
+        if validator_flags is None:
+            validator_flags = ""
+        if output_validator_flags is None:
+            output_validator_flags = ""
+        self.validator_flags = validator_flags.split() + output_validator_flags.split()
+
+def load_problem_config(filename):
+    config = {}
+    with open(filename) as config_file:
+        config = yaml.safe_load(config_file)
+    
+    return ProblemConfig(**config)
 
 class TestProblemMeta(type):
     def __new__(mcs, name, bases, dictionary, problem_name):
@@ -34,6 +54,8 @@ class TestProblemMeta(type):
         MEMORY_LIMIT_IN_BYTES = 64 * 1024 * 1024
         OUTPUT_LIMIT_IN_BYTES = 128 * 1024
 
+        dictionary['config'] = load_problem_config(PROBLEM_YAML)
+
         def _run_testcase(self, test_name: Path):
             test_name = Path(test_name)
             input_data, output, answer = "", "", ""
@@ -44,10 +66,11 @@ class TestProblemMeta(type):
             answer_filename = test_name.with_suffix('.ans')
             with open(answer_filename) as f:
                 answer = f.read()
+
             if not Path(SUBMISSION_FILE).exists():
                 self.fail("Unable to run submission. Is it missing?")
             try:
-                command = ('python3', '-u', SUBMISSION_FILE)
+                command = ('python3', SUBMISSION_FILE)
 
                 calc = subprocess.Popen(command,
                                         stdin=subprocess.PIPE,
@@ -71,7 +94,7 @@ class TestProblemMeta(type):
 
             test_feedback_dir = FEEDBACK_DIR / test_name.stem
             test_feedback_dir.mkdir(parents=True, exist_ok=True)
-            compare_command = ('./default_validator', input_filename, answer_filename, str(test_feedback_dir))
+            compare_command = ('./default_validator', input_filename, answer_filename, str(test_feedback_dir)) + tuple(self.config.validator_flags)
             compare = subprocess.Popen(compare_command, stdin=subprocess.PIPE, stdout=subprocess.PIPE, encoding='utf8')
             compare.communicate(output)
             if compare.returncode == EXIT_WA:
@@ -113,6 +136,7 @@ for problem in Path('problems').iterdir():
         C.__name__ = class_name
         C.__qualname__ = class_name
         module.__setattr__(class_name, C)
+        break # only support one problem each autograder
 
 # The dynamically created class will reside in the module
 # after the loop and needs to be manually deleted
