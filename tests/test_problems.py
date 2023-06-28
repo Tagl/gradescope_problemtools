@@ -63,7 +63,7 @@ class TestProblemMeta(type):
             input_filename = test_name.with_suffix('.in')
             with open(input_filename) as f:
                 input_data = f.read()
-            
+
             answer_filename = test_name.with_suffix('.ans')
             with open(answer_filename) as f:
                 answer = f.read()
