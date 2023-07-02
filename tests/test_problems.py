@@ -2,10 +2,11 @@ import functools
 import subprocess
 import sys
 import unittest
-import yaml
 
 from gradescope_utils.autograder_utils.decorators import weight, tags
 from pathlib import Path
+
+from problem_config import load_problem_config
 
 if sys.platform != "win32":
     import resource
@@ -48,33 +49,11 @@ def limit_virtual_memory(memory_limit):
     # the soft part so that the limit can be increased later (setting also
     # the hard limit would prevent that).
     # When the limit cannot be changed, setrlimit() raises ValueError.
-    if sys.platform == "win32":
-        return
     resource.setrlimit(resource.RLIMIT_AS, (memory_limit, resource.RLIM_INFINITY))
-
-class ProblemConfig:
-    def __init__(self, *, name, **kwargs):
-        self.name = name
-        self.type = kwargs.get('type', 'pass-fail')
-        validator_flags = kwargs.get('validator_flags', "")
-        output_validator_flags = kwargs.get('output_validator_flags', "")
-        if validator_flags is None:
-            validator_flags = ""
-        if output_validator_flags is None:
-            output_validator_flags = ""
-        self.validator_flags = validator_flags.split() + output_validator_flags.split()
-
-def load_problem_config(filename):
-    config = {}
-    with open(filename) as config_file:
-        config = yaml.safe_load(config_file)
-    
-    return ProblemConfig(**config)
 
 class TestProblemMeta(type):
     def __new__(mcs, name, bases, dictionary, problem_name):
         SUBMISSION_DIR = f"/autograder/submission/"
-        SUBMISSION_DIR = f"submission/"
         EXIT_AC = 42
         EXIT_WA = 43
         PROBLEMS_DIR = Path('problems')
@@ -85,21 +64,23 @@ class TestProblemMeta(type):
         SECRET_DIR = DATA_DIR / 'secret'
         FEEDBACK_DIR = Path('feedback') / problem_name
         TIME_LIMIT_IN_SECONDS = 1
-        COMPILE_TIME_LIMIT_IN_SECONDS = 60
-        MEMORY_LIMIT_IN_BYTES = 64 * 1024 * 1024
-        OUTPUT_LIMIT_IN_BYTES = 128 * 1024
 
         @classmethod
         def setUpClass(cls):
             cls.config = load_problem_config(PROBLEM_YAML)
             cls.metavariables = get_program_metavariables(SUBMISSION_DIR)
             compile_command = ('/usr/bin/python3', '-m', 'py_compile', *cls.metavariables['files'])
+            limit_mem = None
+            MEBIBYTE = 1024 * 1024
+            if sys.platform != "win32":
+                limit_mem = lambda: limit_virtual_memory(cls.config.limits.compilation_memory * MEBIBYTE)
             try:
                 compile_process = subprocess.Popen(compile_command,
                                                    stdin=subprocess.PIPE,
                                                    stdout=subprocess.PIPE,
-                                                   encoding='utf8')
-                output, err = compile_process.communicate('', COMPILE_TIME_LIMIT_IN_SECONDS)
+                                                   encoding='utf8',
+                                                   preexec_fn=limit_mem)
+                output, err = compile_process.communicate('', cls.config.limits.compilation_time)
                 compile_process.terminate()
             except subprocess.TimeoutExpired:
                 cls.fail(cls, f"Compile time limit of {COMPILE_TIME_LIMIT_IN_SECONDS} seconds exceeded.")
@@ -125,12 +106,16 @@ class TestProblemMeta(type):
                 answer = f.read()
 
             run_command = (x.format(**self.metavariables) for x in ('/usr/bin/python3', '{mainfile}'))
+            limit_mem = None
+            MEBIBYTE = 1024 * 1024
+            if sys.platform != "win32":
+                limit_mem = lambda: limit_virtual_memory(self.config.limits.memory * MEBIBYTE)
             try:
                 run_process = subprocess.Popen(run_command,
                                         stdin=subprocess.PIPE,
                                         stdout=subprocess.PIPE,
                                         encoding='utf8',
-                                        preexec_fn=(lambda: limit_virtual_memory(MEMORY_LIMIT_IN_BYTES)) if sys.platform != "win32" else None)
+                                        preexec_fn=lambda: limit_mem)
                 output, err = run_process.communicate(input_data, TIME_LIMIT_IN_SECONDS)
                 run_process.terminate()
             except subprocess.TimeoutExpired:
@@ -143,7 +128,7 @@ class TestProblemMeta(type):
                 self.fail("Runtime error when executing submission")
             
             output_bytes = output.encode()
-            if len(output_bytes) > OUTPUT_LIMIT_IN_BYTES:
+            if len(output_bytes) > self.config.limits.output * MEBIBYTE:
                 self.fail(f"Output was {len(output_bytes)} bytes which exceeds limit of {OUTPUT_LIMIT_IN_BYTES} bytes.")
 
             test_feedback_dir = FEEDBACK_DIR / test_name.stem
