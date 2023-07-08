@@ -27,7 +27,7 @@ def get_program_metavariables(source_path) :
     submitted_files = [f for f in source_path.iterdir()]
     res = {}
     res['path'] = source_path
-    res['files'] = (str(x) for x in submitted_files)
+    res['files'] = [str(x) for x in submitted_files]
     for f in submitted_files:
         if f.suffix != '.py':
             raise UnsupportedLanguage(f.relative_to(source_path))
@@ -38,11 +38,12 @@ def get_program_metavariables(source_path) :
         if len(main_matches) > 0:
             res['mainfile'] = main_matches[0]
         else:
-            res['mainfile'] = sorted(self.files)[0]
+            res['mainfile'] = sorted(res['files'])[0]
     res['mainclass'] = Path(res['mainfile']).with_suffix('').stem
     res['Mainclass'] = res['mainclass'].capitalize()
     res['binary'] = str(source_path / 'program')
     return res
+
 
 def limit_virtual_memory(memory_limit):
     # The tuple below is of the form (soft limit, hard limit). Limit only
@@ -53,7 +54,7 @@ def limit_virtual_memory(memory_limit):
 
 class TestProblemMeta(type):
     def __new__(mcs, name, bases, dictionary, problem_name):
-        SUBMISSION_DIR = f"/autograder/submission/"
+        SUBMISSION_DIR = Path('/autograder/submission')
         EXIT_AC = 42
         EXIT_WA = 43
         PROBLEMS_DIR = Path('problems')
@@ -65,8 +66,18 @@ class TestProblemMeta(type):
         FEEDBACK_DIR = Path('feedback') / problem_name
         TIME_LIMIT_IN_SECONDS = 1
 
+        def move_included_files():
+            LANGUAGE = 'python3'
+            INCLUDE_DIR = PROBLEM_DIR / 'include' / LANGUAGE
+            if INCLUDE_DIR.exists() and INCLUDE_DIR.is_dir():
+                files = [_ for _ in INCLUDE_DIR.iterdir()]
+                for from_file in files:
+                    to_file = SUBMISSION_DIR / from_file.name
+                    to_file.write_text(from_file.read_text())
+
         @classmethod
         def setUpClass(cls):
+            move_included_files()
             cls.config = load_problem_config(PROBLEM_YAML)
             cls.metavariables = get_program_metavariables(SUBMISSION_DIR)
             compile_command = ('/usr/bin/python3', '-m', 'py_compile', *cls.metavariables['files'])
@@ -179,4 +190,8 @@ for problem in Path('problems').iterdir():
 
 # The dynamically created class will reside in the module
 # after the loop and needs to be manually deleted
-module.__delattr__('C')
+try:
+    module.__delattr__('C')
+except AttributeError:
+    # fail silently
+    pass
