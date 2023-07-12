@@ -1,6 +1,7 @@
 .vs/
 feedback/
-*_submission.py
+problems/
+autograder/
 autograder.zip
 
 # Byte-compiled / optimized / DLL files
