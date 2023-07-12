@@ -7,5 +7,6 @@ g++ -O3 -o default_validator default_validator.cpp
 popd
 
 pushd /autograder/source/problems/*/data
+dos2unix generator
 . ./generator
 popd
