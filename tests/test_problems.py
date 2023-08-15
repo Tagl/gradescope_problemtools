@@ -82,7 +82,7 @@ LANGUAGES = Languages(load_config('languages.yaml'))
 
 class TestProblemMeta(type):
     def __new__(mcs, name, bases, dictionary, problem_name):
-        SUBMISSION_DIR = Path('autograder/submission').absolute()
+        SUBMISSION_DIR = Path('/autograder/submission').absolute()
         EXIT_AC = 42
         EXIT_WA = 43
         PROBLEMS_DIR = Path('problems')
