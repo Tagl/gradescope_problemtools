@@ -12,11 +12,13 @@ pip3 install -r requirements.txt
 g++ -O3 -o default_validator default_validator.cpp
 popd
 
-mkdir -p "$PROBLEMSDIR"
-
-for problemdir in "$PROBLEMSDIR/*"; do
-    pushd "$problemdir/data"
-    dos2unix generator
-    . ./generator
-    popd
-done
+if [ -d $PROBLEMSDIR ]; then
+    for problemdir in "$PROBLEMSDIR/*"; do
+        pushd "$problemdir/data"
+        dos2unix generator
+        . ./generator
+        popd
+    done
+else
+    mkdir -p "$PROBLEMSDIR"
+fi
