@@ -4,7 +4,9 @@ MAINDIR="/autograder/source"
 PROBLEMSDIR="/autograder/source/problems"
 
 pushd "$MAINDIR"
-apt-get install -y python3 python3-pip python3-dev g++
+apt install -y automake g++ make libboost-regex-dev libgmp-dev libgmp10 libgmpxx4ldbl python3 python3-pip python3-dev python3-pytest python3-setuptools python3-yaml python3-plastex
+apt install -y ghostscript libgmpxx4ldbl python3-minimal python-pkg-resources python3-plastex python3-yaml texlive-fonts-recommended texlive-lang-cyrillic texlive-latex-extra texlive-plain-generic tidy
+pip3 install git+https://github.com/kattis/problemtools
 add-apt-repository ppa:pypy/ppa
 apt update
 apt install -y pypy3
