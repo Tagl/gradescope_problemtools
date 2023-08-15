@@ -15,8 +15,10 @@ popd
 if [ -d $PROBLEMSDIR ]; then
     for problemdir in "$PROBLEMSDIR/*"; do
         pushd "$problemdir/data"
-        dos2unix generator
-        . ./generator
+        if [ -e generator ]; then
+            dos2unix generator
+            . ./generator
+        fi
         popd
     done
 else
