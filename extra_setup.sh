@@ -4,13 +4,34 @@ MAINDIR="/autograder/source"
 PROBLEMSDIR="/autograder/source/problems"
 
 pushd "$MAINDIR"
-apt install -y automake g++ make libboost-regex-dev libgmp-dev libgmp10 libgmpxx4ldbl python3 python3-pip python3-dev python3-pytest python3-setuptools python3-yaml python3-plastex
-apt install -y ghostscript libgmpxx4ldbl python3-minimal python-pkg-resources python3-plastex python3-yaml texlive-fonts-recommended texlive-lang-cyrillic texlive-latex-extra texlive-plain-generic tidy
+apt-get update && \
+apt-get install -y \
+        automake \
+        g++ \
+        git \
+        libboost-all-dev \
+        libgmp-dev \
+        libgmp10 \
+        libgmpxx4ldbl \
+        openjdk-8-jdk \
+        python3-minimal \
+        python3-pip \
+        python3-plastex \
+        python3-yaml \
+        texlive-fonts-recommended \
+        texlive-lang-cyrillic \
+        texlive-latex-extra \
+        texlive-plain-generic \
+        tidy \
+        vim
+
 pip3 install git+https://github.com/kattis/problemtools
+pip3 install -r requirements.txt
+
 add-apt-repository ppa:pypy/ppa
 apt update
 apt install -y pypy3
-pip3 install -r requirements.txt
+
 g++ -O3 -o default_validator default_validator.cpp
 popd
 
