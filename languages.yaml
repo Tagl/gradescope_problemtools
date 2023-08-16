@@ -148,7 +148,7 @@ java:
     priority: 800
     files: '*.java'
     compile: '/usr/bin/javac -encoding UTF-8 -sourcepath {path} -d {path} {files}'
-    run: '/usr/bin/java -Dfile.encoding=UTF-8 -XX:+UseSerialGC -Xss64m -Xms{memlim}m -Xmx{memlim}m -cp {path} {mainclass}'
+    run: '/usr/bin/java -verbose:class -Dfile.encoding=UTF-8 -XX:+UseSerialGC -Xss64m -Xms{memlim}m -Xmx{memlim}m -cp {path} {mainclass}'
 
 javascript:
     name: 'JavaScript'
