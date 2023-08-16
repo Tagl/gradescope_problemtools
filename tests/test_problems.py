@@ -125,16 +125,22 @@ class TestProblemMeta(type):
 
             
             output_filename = Path(self.tmpdir) / 'output'
+            error_filename = Path(self.tmpdir) / 'error'
 
             status, runtime = self.program.run(infile=str(input_filename),
                                                outfile=str(output_filename),
+                                               errfile=str(error_filename),
                                                timelim=TIME_LIMIT_IN_SECONDS + 1,
                                                memlim=self.config.limits.memory)
+            
+            with open(error_filename) as f:
+                print("stderr:")
+                print(f.read())
             
             if is_TLE(status) or runtime > TIME_LIMIT_IN_SECONDS:
                 self.fail(f"Time Limit Exceeded ({runtime} / {TIME_LIMIT_IN_SECONDS} seconds)")
             elif is_RTE(status):
-                self.fail("Runtime Error")
+                self.fail("Runtime Error (Exit Code {status})")
             
             answer_filename = test_name.with_suffix('.ans')
             with open(answer_filename) as f:
