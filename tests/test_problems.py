@@ -21,11 +21,11 @@ class ProblemException(Exception):
     pass
 
 class UnsupportedLanguage(ProblemException):
-    def __init__(self, f):
-        self.f = f
+    def __init__(self, lang):
+        self.lang = lang
     
     def __str__(self):
-        return "Submitted code file {} is in an unsupported language.".format(self.f)
+        return "Unsupported programming language {}".format(self.lang)
 
 def load_config(configuration_file):
     """Load a problemtools configuration file.
@@ -75,15 +75,25 @@ class TestProblemMeta(type):
         @classmethod
         def setUpClass(cls):
             cls.tmpdir = tempfile.mkdtemp()
-            print(cls.tmpdir)
             cls.config = load_problem_config(PROBLEM_YAML)
             cls.program = get_program(str(SUBMISSION_DIR), LANGUAGES, cls.tmpdir, INCLUDE_DIR)
-            cls.program.compile()
+            if not cls.config.language_allowed(cls.program.language.lang_id):
+                cls.compile_result = (False, str(UnsupportedLanguage(cls.program.language.lang_id)))
+            else:
+                cls.compile_result = cls.program.compile()
+
+        def test_compilation(self):
+            if self.compile_result[0]:
+                print("Compilation successful")
+            else:
+                self.fail(self.compile_result[1])
 
         dictionary['setUpClass'] = setUpClass
+        dictionary['test_compilation'] = test_compilation
 
         def _run_testcase(self, test_name: Path):
-            
+            if not self.compile_result[0]:
+                self.fail("Not run")
             test_name = Path(test_name)
             input_data, output, answer = "", "", ""
 

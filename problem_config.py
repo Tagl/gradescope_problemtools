@@ -24,7 +24,13 @@ class ProblemConfig:
         if output_validator_flags is None:
             output_validator_flags = ""
         self.validator_flags = validator_flags.split() + output_validator_flags.split()
+        self.languages = kwargs.get('languages', None)
+        if self.languages is not None:
+            self.languages = set(self.languages.split())
         self.limits = Limits(**kwargs.get('limits', {}))
+
+    def language_allowed(self, language_id):
+        return self.languages is None or language_id in self.languages
 
 def load_problem_config(filename):
     config = {}
