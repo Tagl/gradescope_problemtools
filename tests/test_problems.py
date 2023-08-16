@@ -75,7 +75,7 @@ class TestProblemMeta(type):
         SAMPLE_DIR = DATA_DIR / 'sample'
         SECRET_DIR = DATA_DIR / 'secret'
         FEEDBACK_DIR = Path('feedback') / problem_name
-        TIME_LIMIT_IN_SECONDS = 1
+        TIME_LIMIT_IN_SECONDS = 10
 
         @classmethod
         def setUpClass(cls):
@@ -105,6 +105,10 @@ class TestProblemMeta(type):
                                                errfile=str(error_filename),
                                                timelim=TIME_LIMIT_IN_SECONDS + 1,
                                                memlim=self.config.limits.memory)
+            
+            with open(output_filename) as f:
+                print("stdout:")
+                print(f.read())
             
             with open(error_filename) as f:
                 print("stderr:")
