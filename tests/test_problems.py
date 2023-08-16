@@ -12,6 +12,11 @@ from problemtools.config import ConfigError
 from problemtools.languages import Languages
 from problemtools.run import get_program
 from problemtools.verifyproblem import is_RTE, is_TLE
+from problemtools.verifyproblem import logging
+fmt = "%(levelname)s %(message)s"
+logging.basicConfig(stream=sys.stdout,
+                    format=fmt,
+                    level=logging.DEBUG)
 from problem_config import load_problem_config
 
 if sys.platform != "win32":
@@ -26,29 +31,6 @@ class UnsupportedLanguage(ProblemException):
     
     def __str__(self):
         return "Submitted code file {} is in an unsupported language.".format(self.f)
-
-def get_program_metavariables(source_path) :
-    if isinstance(source_path, str):
-        source_path = Path(source_path)
-    submitted_files = [f for f in source_path.iterdir()]
-    res = {}
-    res['path'] = source_path
-    res['files'] = [str(x) for x in submitted_files]
-    for f in submitted_files:
-        if f.suffix != '.py':
-            raise UnsupportedLanguage(f.relative_to(source_path))
-    if len(submitted_files) == 1:
-        res['mainfile'] = str(submitted_files[0])
-    else:
-        main_matches = list(source_path.glob("[mM][aA][iI][nN].*"))
-        if len(main_matches) > 0:
-            res['mainfile'] = main_matches[0]
-        else:
-            res['mainfile'] = sorted(res['files'])[0]
-    res['mainclass'] = Path(res['mainfile']).with_suffix('').stem
-    res['Mainclass'] = res['mainclass'].capitalize()
-    res['binary'] = str(source_path / 'program')
-    return res
 
 def load_config(configuration_file):
     """Load a problemtools configuration file.
@@ -95,19 +77,10 @@ class TestProblemMeta(type):
         FEEDBACK_DIR = Path('feedback') / problem_name
         TIME_LIMIT_IN_SECONDS = 1
 
-
-        def move_included_files():
-            LANGUAGE = 'python3'
-            INCLUDE_DIR = PROBLEM_DIR / 'include' / LANGUAGE
-            if INCLUDE_DIR.exists() and INCLUDE_DIR.is_dir():
-                files = [_ for _ in INCLUDE_DIR.iterdir()]
-                for from_file in files:
-                    to_file = SUBMISSION_DIR / from_file.name
-                    to_file.write_text(from_file.read_text())
-
         @classmethod
         def setUpClass(cls):
             cls.tmpdir = tempfile.mkdtemp()
+            print(cls.tmpdir)
             cls.config = load_problem_config(PROBLEM_YAML)
             cls.program = get_program(str(SUBMISSION_DIR), LANGUAGES, cls.tmpdir, INCLUDE_DIR)
             cls.program.compile()
