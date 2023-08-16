@@ -1,11 +1,17 @@
 import functools
 import subprocess
 import sys
+import tempfile
 import unittest
+import yaml
 
 from gradescope_utils.autograder_utils.decorators import weight, tags
 from pathlib import Path
 
+from problemtools.config import ConfigError
+from problemtools.languages import Languages
+from problemtools.run import get_program
+from problemtools.verifyproblem import is_RTE, is_TLE
 from problem_config import load_problem_config
 
 if sys.platform != "win32":
@@ -15,50 +21,50 @@ class ProblemException(Exception):
     pass
 
 class UnsupportedLanguage(ProblemException):
-    def __init__(self, f):
-        self.f = f
+    def __init__(self, lang):
+        self.lang = lang
     
     def __str__(self):
-        return "Submitted code file {} is in an unsupported language.".format(self.f)
+        return "Unsupported programming language {}".format(self.lang)
 
-def get_program_metavariables(source_path) :
-    if isinstance(source_path, str):
-        source_path = Path(source_path)
-    submitted_files = [f for f in source_path.iterdir()]
-    res = {}
-    res['path'] = source_path
-    res['files'] = [str(x) for x in submitted_files]
-    for f in submitted_files:
-        if f.suffix != '.py':
-            raise UnsupportedLanguage(f.relative_to(source_path))
-    if len(submitted_files) == 1:
-        res['mainfile'] = str(submitted_files[0])
-    else:
-        main_matches = list(source_path.glob("[mM][aA][iI][nN].*"))
-        if len(main_matches) > 0:
-            res['mainfile'] = main_matches[0]
-        else:
-            res['mainfile'] = sorted(res['files'])[0]
-    res['mainclass'] = Path(res['mainfile']).with_suffix('').stem
-    res['Mainclass'] = res['mainclass'].capitalize()
-    res['binary'] = str(source_path / 'program')
+def load_config(configuration_file):
+    """Load a problemtools configuration file.
+
+    Args:
+        configuration_file (str): name of configuration file.  Name is
+        relative to config directory so typically just a file name
+        without paths, e.g. "languages.yaml".
+    """
+    res = None
+
+    path = Path(configuration_file)
+    new_config = None
+    if path.is_file():
+        try:
+            with open(path, 'r') as config:
+                new_config = yaml.safe_load(config.read())
+        except (yaml.parser.ParserError, yaml.parser.ScannerError) as err:
+            raise ConfigError('Config file %s: failed to parse: %s' % (path, err))
+    if res is None:
+        if new_config is None:
+            raise ConfigError('Base configuration file %s not found in %s'
+                              % (configuration_file, path))
+        res = new_config
+    elif new_config is not None:
+        __update_dict(res, new_config)
+
     return res
 
-
-def limit_virtual_memory(memory_limit):
-    # The tuple below is of the form (soft limit, hard limit). Limit only
-    # the soft part so that the limit can be increased later (setting also
-    # the hard limit would prevent that).
-    # When the limit cannot be changed, setrlimit() raises ValueError.
-    resource.setrlimit(resource.RLIMIT_AS, (memory_limit, resource.RLIM_INFINITY))
+LANGUAGES = Languages(load_config('languages.yaml'))
 
 class TestProblemMeta(type):
     def __new__(mcs, name, bases, dictionary, problem_name):
-        SUBMISSION_DIR = Path('/autograder/submission')
+        SUBMISSION_DIR = Path('/autograder/submission').absolute()
         EXIT_AC = 42
         EXIT_WA = 43
         PROBLEMS_DIR = Path('problems')
         PROBLEM_DIR = PROBLEMS_DIR / problem_name
+        INCLUDE_DIR = PROBLEM_DIR / 'include'
         PROBLEM_YAML = PROBLEM_DIR / 'problem.yaml'
         DATA_DIR = PROBLEM_DIR / 'data'
         SAMPLE_DIR = DATA_DIR / 'sample'
@@ -66,45 +72,28 @@ class TestProblemMeta(type):
         FEEDBACK_DIR = Path('feedback') / problem_name
         TIME_LIMIT_IN_SECONDS = 1
 
-        def move_included_files():
-            LANGUAGE = 'python3'
-            INCLUDE_DIR = PROBLEM_DIR / 'include' / LANGUAGE
-            if INCLUDE_DIR.exists() and INCLUDE_DIR.is_dir():
-                files = [_ for _ in INCLUDE_DIR.iterdir()]
-                for from_file in files:
-                    to_file = SUBMISSION_DIR / from_file.name
-                    to_file.write_text(from_file.read_text())
-
         @classmethod
         def setUpClass(cls):
-            move_included_files()
+            cls.tmpdir = tempfile.mkdtemp()
             cls.config = load_problem_config(PROBLEM_YAML)
-            cls.metavariables = get_program_metavariables(SUBMISSION_DIR)
-            compile_command = ('/usr/bin/python3', '-m', 'py_compile', *cls.metavariables['files'])
-            limit_mem = None
-            MEBIBYTE = 1024 * 1024
-            if sys.platform != "win32":
-                limit_mem = lambda: limit_virtual_memory(cls.config.limits.compilation_memory * MEBIBYTE)
-            try:
-                compile_process = subprocess.Popen(compile_command,
-                                                   stdin=subprocess.PIPE,
-                                                   stdout=subprocess.PIPE,
-                                                   encoding='utf8',
-                                                   preexec_fn=limit_mem)
-                output, err = compile_process.communicate('', cls.config.limits.compilation_time)
-                compile_process.terminate()
-            except subprocess.TimeoutExpired:
-                cls.fail(cls, f"Compile time limit of {COMPILE_TIME_LIMIT_IN_SECONDS} seconds exceeded.")
-            except subprocess.CalledProcessError:
-                cls.fail(cls, "Compile error")
-            except Exception:
-                cls.fail(cls, "Unknown error compiling submission, contact the instructor")
-            if compile_process.returncode != 0:
-                cls.fail(cls, "Compile error")
+            cls.program = get_program(str(SUBMISSION_DIR), LANGUAGES, cls.tmpdir, INCLUDE_DIR)
+            if not cls.config.language_allowed(cls.program.language.lang_id):
+                cls.compile_result = (False, str(UnsupportedLanguage(cls.program.language.lang_id)))
+            else:
+                cls.compile_result = cls.program.compile()
+
+        def test_compilation(self):
+            if self.compile_result[0]:
+                print("Compilation successful")
+            else:
+                self.fail(self.compile_result[1])
 
         dictionary['setUpClass'] = setUpClass
+        dictionary['test_compilation'] = test_compilation
 
         def _run_testcase(self, test_name: Path):
+            if not self.compile_result[0]:
+                self.fail("Not run")
             test_name = Path(test_name)
             input_data, output, answer = "", "", ""
 
@@ -112,45 +101,47 @@ class TestProblemMeta(type):
             with open(input_filename) as f:
                 input_data = f.read()
 
-            answer_filename = test_name.with_suffix('.ans')
-            with open(answer_filename) as f:
-                answer = f.read()
-
-            run_command = (x.format(**self.metavariables) for x in ('/usr/bin/python3', '{mainfile}'))
-            limit_mem = None
-            MEBIBYTE = 1024 * 1024
-            if sys.platform != "win32":
-                limit_mem = lambda: limit_virtual_memory(self.config.limits.memory * MEBIBYTE)
-            try:
-                run_process = subprocess.Popen(run_command,
-                                        stdin=subprocess.PIPE,
-                                        stdout=subprocess.PIPE,
-                                        encoding='utf8',
-                                        preexec_fn=lambda: limit_mem)
-                output, err = run_process.communicate(input_data, TIME_LIMIT_IN_SECONDS)
-                run_process.terminate()
-            except subprocess.TimeoutExpired:
-                self.fail(f"Time limit of {TIME_LIMIT_IN_SECONDS} seconds exceeded.")
-            except subprocess.CalledProcessError:
-                self.fail("Runtime error when executing submission")
-            except Exception:
-                self.fail("Unknown error judging submission, contact the instructor")
-            if run_process.returncode != 0:
-                self.fail("Runtime error when executing submission")
             
+            output_filename = Path(self.tmpdir) / 'output'
+            error_filename = Path(self.tmpdir) / 'error'
+
+            status, runtime = self.program.run(infile=str(input_filename),
+                                               outfile=str(output_filename),
+                                               errfile=str(error_filename),
+                                               timelim=int(TIME_LIMIT_IN_SECONDS + 1.999),
+                                               memlim=self.config.limits.memory)
+            
+            print(f"Execution time: {runtime:.4f} / {TIME_LIMIT_IN_SECONDS} seconds")
+            
+            if is_TLE(status) or runtime > TIME_LIMIT_IN_SECONDS:
+                print("Time Limit Exceeded")
+                self.fail()
+            elif is_RTE(status):
+                print("Runtime Error (Exit Code {status})")
+                self.fail()
+            
+            answer_filename = test_name.with_suffix('.ans')
+
+            with open(output_filename) as f:
+                output = f.read()
+
             output_bytes = output.encode()
+            MEBIBYTE = 1024 * 1024
             if len(output_bytes) > self.config.limits.output * MEBIBYTE:
                 self.fail(f"Output was {len(output_bytes)} bytes which exceeds limit of {OUTPUT_LIMIT_IN_BYTES} bytes.")
 
-            test_feedback_dir = FEEDBACK_DIR / test_name.stem
-            test_feedback_dir.mkdir(parents=True, exist_ok=True)
+            test_feedback_dir = tempfile.mkdtemp(prefix='feedback', dir=self.tmpdir)
             compare_command = ('./default_validator', input_filename, answer_filename, str(test_feedback_dir)) + tuple(self.config.validator_flags)
             compare = subprocess.Popen(compare_command, stdin=subprocess.PIPE, stdout=subprocess.PIPE, encoding='utf8')
             compare.communicate(output)
+
             if compare.returncode == EXIT_WA:
-                self.fail(f"Wrong answer")
+                print("Wrong Answer")
+                self.fail()
             elif compare.returncode != EXIT_AC:
-                self.fail(f"Judge error")
+                print("Judge Error")
+                self.fail()
+            print("Accepted")
 
         samples = [sample.with_suffix('') for sample in SAMPLE_DIR.glob('*.in')]
         secrets = [secret.with_suffix('') for secret in SECRET_DIR.rglob('**/*.in')]
