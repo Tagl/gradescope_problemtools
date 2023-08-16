@@ -12,11 +12,6 @@ from problemtools.config import ConfigError
 from problemtools.languages import Languages
 from problemtools.run import get_program
 from problemtools.verifyproblem import is_RTE, is_TLE
-from problemtools.verifyproblem import logging
-fmt = "%(levelname)s %(message)s"
-logging.basicConfig(stream=sys.stdout,
-                    format=fmt,
-                    level=logging.DEBUG)
 from problem_config import load_problem_config
 
 if sys.platform != "win32":
@@ -75,7 +70,7 @@ class TestProblemMeta(type):
         SAMPLE_DIR = DATA_DIR / 'sample'
         SECRET_DIR = DATA_DIR / 'secret'
         FEEDBACK_DIR = Path('feedback') / problem_name
-        TIME_LIMIT_IN_SECONDS = 10
+        TIME_LIMIT_IN_SECONDS = 1
 
         @classmethod
         def setUpClass(cls):
@@ -103,25 +98,19 @@ class TestProblemMeta(type):
             status, runtime = self.program.run(infile=str(input_filename),
                                                outfile=str(output_filename),
                                                errfile=str(error_filename),
-                                               timelim=TIME_LIMIT_IN_SECONDS + 1,
+                                               timelim=int(TIME_LIMIT_IN_SECONDS + 1.999),
                                                memlim=self.config.limits.memory)
             
-            with open(output_filename) as f:
-                print("stdout:")
-                print(f.read())
-            
-            with open(error_filename) as f:
-                print("stderr:")
-                print(f.read())
+            print(f"Execution time: {runtime:.4f} / {TIME_LIMIT_IN_SECONDS} seconds")
             
             if is_TLE(status) or runtime > TIME_LIMIT_IN_SECONDS:
-                self.fail(f"Time Limit Exceeded ({runtime} / {TIME_LIMIT_IN_SECONDS} seconds)")
+                print("Time Limit Exceeded")
+                self.fail()
             elif is_RTE(status):
-                self.fail(f"Runtime Error (Exit Code {status})")
+                print("Runtime Error (Exit Code {status})")
+                self.fail()
             
             answer_filename = test_name.with_suffix('.ans')
-            with open(answer_filename) as f:
-                answer = f.read()
 
             with open(output_filename) as f:
                 output = f.read()
@@ -137,9 +126,12 @@ class TestProblemMeta(type):
             compare.communicate(output)
 
             if compare.returncode == EXIT_WA:
-                self.fail(f"Wrong Answer")
+                print("Wrong Answer")
+                self.fail()
             elif compare.returncode != EXIT_AC:
-                self.fail(f"Judge Error")
+                print("Judge Error")
+                self.fail()
+            print("Accepted")
 
         samples = [sample.with_suffix('') for sample in SAMPLE_DIR.glob('*.in')]
         secrets = [secret.with_suffix('') for secret in SECRET_DIR.rglob('**/*.in')]
