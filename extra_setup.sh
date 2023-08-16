@@ -13,7 +13,7 @@ apt-get install -y \
         libgmp-dev \
         libgmp10 \
         libgmpxx4ldbl \
-        openjdk-8-jdk \
+        openjdk-11-jdk \
         python3-minimal \
         python3-pip \
         python3-plastex \
