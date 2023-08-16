@@ -109,7 +109,7 @@ class TestProblemMeta(type):
         def setUpClass(cls):
             cls.tmpdir = tempfile.mkdtemp()
             cls.config = load_problem_config(PROBLEM_YAML)
-            cls.program = get_program(str(SUBMISSION_DIR), LANGUAGES, None, INCLUDE_DIR)
+            cls.program = get_program(str(SUBMISSION_DIR), LANGUAGES, cls.tmpdir, INCLUDE_DIR)
             cls.program.compile()
 
         dictionary['setUpClass'] = setUpClass
@@ -140,7 +140,7 @@ class TestProblemMeta(type):
             if is_TLE(status) or runtime > TIME_LIMIT_IN_SECONDS:
                 self.fail(f"Time Limit Exceeded ({runtime} / {TIME_LIMIT_IN_SECONDS} seconds)")
             elif is_RTE(status):
-                self.fail("Runtime Error (Exit Code {status})")
+                self.fail(f"Runtime Error (Exit Code {status})")
             
             answer_filename = test_name.with_suffix('.ans')
             with open(answer_filename) as f:
