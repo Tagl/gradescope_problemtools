@@ -38,11 +38,17 @@ popd
 if [ -d "$PROBLEMSDIR" ]; then
     for problemdir in "$PROBLEMSDIR/*"; do
         [ -e "$problemdir" ] || continue
-        pushd "$problemdir/data"
+        pushd "$problemdir"
+        pushd "data"
         if [ -e generator ]; then
             dos2unix generator
             . ./generator
         fi
+        popd
+        echo "Determining time limit..."
+        verifyproblem . -p submissions | grep "setting timelim to" | cut -d ' ' -f 11 > .timelimit
+        echo -n "Time limit in seconds set to: "
+        cat .timelimit
         popd
     done
 else
