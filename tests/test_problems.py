@@ -64,18 +64,20 @@ class TestProblemMeta(type):
         EXIT_WA = 43
         PROBLEMS_DIR = Path('problems')
         PROBLEM_DIR = PROBLEMS_DIR / problem_name
+        TIME_LIMIT_FILE = PROBLEM_DIR / '.timelimit'
         INCLUDE_DIR = PROBLEM_DIR / 'include'
         PROBLEM_YAML = PROBLEM_DIR / 'problem.yaml'
         DATA_DIR = PROBLEM_DIR / 'data'
         SAMPLE_DIR = DATA_DIR / 'sample'
         SECRET_DIR = DATA_DIR / 'secret'
         FEEDBACK_DIR = Path('feedback') / problem_name
-        TIME_LIMIT_IN_SECONDS = 1
 
         @classmethod
         def setUpClass(cls):
             cls.tmpdir = tempfile.mkdtemp()
             cls.config = load_problem_config(PROBLEM_YAML)
+            with open(TIME_LIMIT_FILE) as f:
+                cls.time_limit = float(f.readline())
             cls.program = get_program(str(SUBMISSION_DIR), LANGUAGES, cls.tmpdir, INCLUDE_DIR)
             if not cls.config.language_allowed(cls.program.language.lang_id):
                 cls.compile_result = (False, str(UnsupportedLanguage(cls.program.language.lang_id)))
@@ -108,17 +110,15 @@ class TestProblemMeta(type):
             status, runtime = self.program.run(infile=str(input_filename),
                                                outfile=str(output_filename),
                                                errfile=str(error_filename),
-                                               timelim=int(TIME_LIMIT_IN_SECONDS + 1.999),
+                                               timelim=int(self.time_limit + 1.999),
                                                memlim=self.config.limits.memory)
             
-            print(f"Execution time: {runtime:.4f} / {TIME_LIMIT_IN_SECONDS} seconds")
+            print(f"Execution time: {runtime:.4f} / {self.time_limit:.4f} seconds")
             
-            if is_TLE(status) or runtime > TIME_LIMIT_IN_SECONDS:
-                print("Time Limit Exceeded")
-                self.fail()
+            if is_TLE(status) or runtime > self.time_limit:
+                self.fail("Time Limit Exceeded")
             elif is_RTE(status):
-                print("Runtime Error (Exit Code {status})")
-                self.fail()
+                self.fail(f"Runtime Error (Exit Code {status})")
             
             answer_filename = test_name.with_suffix('.ans')
 
@@ -136,11 +136,9 @@ class TestProblemMeta(type):
             compare.communicate(output)
 
             if compare.returncode == EXIT_WA:
-                print("Wrong Answer")
-                self.fail()
+                self.fail("Wrong Answer")
             elif compare.returncode != EXIT_AC:
-                print("Judge Error")
-                self.fail()
+                self.fail("Judge Error")
             print("Accepted")
 
         samples = [sample.with_suffix('') for sample in SAMPLE_DIR.glob('*.in')]
