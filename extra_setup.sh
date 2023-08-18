@@ -35,7 +35,7 @@ apt install -y pypy3
 g++ -O3 -o default_validator default_validator.cpp
 popd
 
-set -e
+set -x
 if [ -d "$PROBLEMSDIR" ]; then
     for problemdir in "$PROBLEMSDIR/*"; do
         [ -e "$problemdir" ] || continue
