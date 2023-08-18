@@ -36,8 +36,8 @@ g++ -O3 -o default_validator default_validator.cpp
 popd
 
 if [ -d "$PROBLEMSDIR" ]; then
-    for problemdir in "$PROBLEMSDIR/*"; do
-        [ -e "$problemdir" ] || continue
+    for problemdir in "$PROBLEMSDIR"/*; do
+        [ -d "$problemdir" ] || continue
         pushd "$problemdir"
         pushd "data"
         if [ -e generator ]; then
