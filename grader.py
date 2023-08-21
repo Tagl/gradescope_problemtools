@@ -61,8 +61,8 @@ class TestResult:
 
     def __str__(self):
         if self.message:
-            return f"{verdict_to_str(self.verdict)} ({self.running_time}s): self.message"
-        return f"{verdict_to_str(self.verdict)} ({self.running_time}s)"
+            return f"{verdict_to_str(self.verdict)} ({self.running_time:.4f}s): {self.message}"
+        return f"{verdict_to_str(self.verdict)} ({self.running_time:.4f}s)"
 
 def run_testcase(program, working_directory, time_limit, config, test_name: Path):
     test_name = Path(test_name)
@@ -85,7 +85,7 @@ def run_testcase(program, working_directory, time_limit, config, test_name: Path
     if is_TLE(status) or running_time > time_limit:
         return TestResult(Verdict.TLE, running_time)
     elif is_RTE(status):
-        return TestResult(Verdict.RTE, running_time, f"Exit code: {status}")
+        return TestResult(Verdict.RTE, running_time, f"Exit Code {status}")
 
     answer_filename = test_name.with_suffix('.ans')
 
@@ -188,13 +188,14 @@ def grade_submission(problem, submission):
 
     else:
         final_verdict = Verdict.CE
+        top_test_result = TestResult(final_verdict, 0.0)
 
     if final_verdict == Verdict.AC:
         result["score"] = 100.0
         result["execution_time"] = sum(x.running_time for x in test_results)
         top_test_result = max(test_results, key=lambda x: x.running_time)
 
-    result["output"] = str(top_test_result)
+    result["output"] = f"# {top_test_result}"
 
     print(json.dumps(result, indent=4))
 
