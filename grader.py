@@ -165,9 +165,13 @@ def grade_submission(problem, submission):
         for i, test in enumerate(sorted(samples) + sorted(secrets), 1):
             test_result = run_testcase(program, tmpdir, time_limit, config, test)
             test_results.append(test_result)
+            if i < len(samples):
+                name = f"### Sample {i} / {len(samples)}"
+            else:
+                name = f"### Testcase {i - len(samples)} / {len(secrets)}"
             result["tests"].append(
                 {
-                    "name": f"### Test {i}",
+                    "name": name,
                     "status": "passed" if test_result.verdict == Verdict.AC else "failed",
                     "output": str(test_result),
                 }

@@ -56,12 +56,13 @@ class ProblemConfig:
         if self.source:
             lines.append(f"- Source: {self.source}")
         if self.author:
-            authors = self.author.split()
+            authors = self.author.split(',')
             if len(self.author) == 1:
                 lines.append(f"- Author: {authors[0]}")
             else:
                 lines.append(f"- Authors:")
                 for author in authors:
+                    author = author.strip()
                     lines.append(f"    - {author}")
 
         lines.append(str(self.limits))
