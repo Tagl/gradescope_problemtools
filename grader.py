@@ -86,7 +86,7 @@ def run_testcase(program, working_directory, time_limit, config, test_name: Path
     hint = ''
     if hint_filename.exists():
         with open(hint_filename) as f:
-            hint = f"Hint:\n{f.read()}"
+            hint = f"Hint:\n```\n{f.read()}```"
 
     if is_TLE(status) or running_time > time_limit:
         return TestResult(Verdict.TLE, running_time, hint)
