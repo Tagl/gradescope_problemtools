@@ -61,7 +61,7 @@ class TestResult:
 
     def __str__(self):
         if self.message:
-            return f"{verdict_to_str(self.verdict)} ({self.running_time:.4f}s): {self.message}"
+            return f"{verdict_to_str(self.verdict)} ({self.running_time:.4f}s)\n{self.message}"
         return f"{verdict_to_str(self.verdict)} ({self.running_time:.4f}s)"
 
 def run_testcase(program, working_directory, time_limit, config, test_name: Path):
@@ -81,11 +81,17 @@ def run_testcase(program, working_directory, time_limit, config, test_name: Path
                                        errfile=str(error_filename),
                                        timelim=int(time_limit + 1.999),
                                        memlim=config.limits.memory)
+    
+    hint_filename = test_name.with_suffix('.hint')
+    hint = ''
+    if hint_filename.exists():
+        with open(hint_filename) as f:
+            hint = f"Hint:\n{f.read()}"
 
     if is_TLE(status) or running_time > time_limit:
-        return TestResult(Verdict.TLE, running_time)
+        return TestResult(Verdict.TLE, running_time, hint)
     elif is_RTE(status):
-        return TestResult(Verdict.RTE, running_time, f"Exit Code {status}")
+        return TestResult(Verdict.RTE, running_time, f"Exit Code {status}\n{hint}")
 
     answer_filename = test_name.with_suffix('.ans')
 
@@ -103,9 +109,9 @@ def run_testcase(program, working_directory, time_limit, config, test_name: Path
     compare.communicate(output)
 
     if compare.returncode == EXIT_WA:
-        return TestResult(Verdict.WA, running_time)
+        return TestResult(Verdict.WA, running_time, hint)
     elif compare.returncode != EXIT_AC:
-        return TestResult(Verdict.JE, running_time)
+        return TestResult(Verdict.JE, running_time, "Something went horribly wrong, please contact the instructor regarding this error")
     return TestResult(Verdict.AC, running_time)
 
 def grade_submission(problem, submission):
