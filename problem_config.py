@@ -12,10 +12,25 @@ class Limits:
         self.validation_time = kwargs.get('validation_time', 60)
         self.validation_memory = kwargs.get('validation_memory', 1024)
         self.validation_output = kwargs.get('validation_output', 8)
+        self.time_limit = None
+
+    def __str__(self):
+        lines = []
+        if self.time_limit:
+            lines.append(f"- Time Limit: {self.time_limit} seconds")
+        lines.append(f"- Memory Limit: {self.memory} MiB")
+        lines.append(f"- Output Limit: {self.output} KiB")
+        lines.append(f"- Code Limit: {self.code} KiB")
+        lines.append(f"- Compilation Time Limit: {self.compilation_time} seconds")
+        return '\n'.join(lines)
 
 class ProblemConfig:
     def __init__(self, *, name, **kwargs):
         self.name = name
+        self.license = kwargs.get('license', 'unknown')
+        self.rights_owner = kwargs.get('rights_owner', kwargs.get('author', "") or kwargs.get('source', ""))
+        self.author = kwargs.get('author', "")
+        self.source = kwargs.get('source', "")
         self.type = kwargs.get('type', 'pass-fail')
         validator_flags = kwargs.get('validator_flags', "")
         output_validator_flags = kwargs.get('output_validator_flags', "")
@@ -31,6 +46,28 @@ class ProblemConfig:
 
     def language_allowed(self, language_id):
         return self.languages is None or language_id in self.languages
+
+    def __str__(self):
+        lines = []
+        if self.name:
+            lines.append(f"- Name: {self.name}")
+        if self.rights_owner and self.rights_owner != self.author and self.rights_owner != self.source:
+            lines.append(f"- Rights owner: {self.rights_owner}")
+        if self.source:
+            lines.append(f"- Source: {self.source}")
+        if self.author:
+            authors = self.author.split()
+            if len(self.author) == 1:
+                lines.append(f"- Author: {authors[0]}")
+            else:
+                lines.append(f"- Authors:")
+                for author in authors:
+                    lines.append(f"    - {author}")
+
+        lines.append(str(self.limits))
+
+        return '\n'.join(lines)
+
 
 def load_problem_config(filename):
     config = {}
