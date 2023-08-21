@@ -4,7 +4,6 @@ MAINDIR="/autograder/source"
 PROBLEMSDIR="/autograder/source/problems"
 
 pushd "$MAINDIR"
-apt-get update && \
 apt-get install -y \
         automake \
         g++ \
@@ -28,10 +27,6 @@ apt-get install -y \
 pip3 install git+https://github.com/kattis/problemtools
 pip3 install -r requirements.txt
 
-add-apt-repository ppa:pypy/ppa
-apt update
-apt install -y pypy3
-
 g++ -O3 -o default_validator default_validator.cpp
 popd
 
@@ -39,12 +34,6 @@ if [ -d "$PROBLEMSDIR" ]; then
     for problemdir in "$PROBLEMSDIR"/*; do
         [ -d "$problemdir" ] || continue
         pushd "$problemdir"
-        pushd "data"
-        if [ -e generator ]; then
-            dos2unix generator
-            . ./generator
-        fi
-        popd
         echo "Determining time limit..."
         verifyproblem . -p submissions | grep "setting timelim to" | cut -d ' ' -f 11 > .timelimit
         echo -n "Time limit in seconds set to: "
