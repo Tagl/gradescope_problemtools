@@ -64,14 +64,63 @@ class TestResult:
             return f"{verdict_to_str(self.verdict)} ({self.running_time:.4f}s)\n{self.message}"
         return f"{verdict_to_str(self.verdict)} ({self.running_time:.4f}s)"
 
-def run_testcase(program, working_directory, time_limit, config, test_name: Path):
+def read_file(path):
+    result = ''
+    if path.exists():
+        with open(path) as f:
+            result = f.read()
+    return result
+
+def get_feedback_message(show_privileged, input_data, output, answer, judge_message='', team_message='', hint=''):
+    lines = []
+    if show_privileged:
+        lines.extend([
+            "#### Input:",
+            "```",
+            f"{input_data}",
+            "```",
+            "#### Your program's output:",
+            "```",
+            f"{output}",
+            "```",
+            "#### Correct output:",
+            "```",
+            f"{answer}",
+            "```"
+        ])
+
+        if judge_message:
+            lines.extend([
+                "#### Validator output:",
+                "```",
+                f"{judge_message}",
+                "```"
+            ])
+    if team_message:
+        lines.extend([
+            "#### Validator message:",
+            "```",
+            f"{team_message}",
+            "```"
+        ])
+    if hint:
+        lines.extend([
+            "#### Hint:",
+            "```",
+            f"{hint}",
+            "```"
+        ])
+    return '\n'.join(lines)
+
+def run_testcase(program, working_directory, time_limit, config, test_name: Path, is_sample=False):
     test_name = Path(test_name)
     input_data, output, answer = "", "", ""
 
     input_filename = test_name.with_suffix('.in')
-    with open(input_filename) as f:
-        input_data = f.read()
+    input_data = read_file(input_filename)
 
+    answer_filename = test_name.with_suffix('.ans')
+    answer = read_file(answer_filename)
 
     output_filename = Path(working_directory) / 'output'
     error_filename = Path(working_directory) / 'error'
@@ -81,37 +130,49 @@ def run_testcase(program, working_directory, time_limit, config, test_name: Path
                                        errfile=str(error_filename),
                                        timelim=int(time_limit + 1.999),
                                        memlim=config.limits.memory)
-    
+
     hint_filename = test_name.with_suffix('.hint')
-    hint = ''
-    if hint_filename.exists():
-        with open(hint_filename) as f:
-            hint = f"Hint:\n```\n{f.read()}```"
+    hint = read_file(hint_filename)
 
     if is_TLE(status) or running_time > time_limit:
-        return TestResult(Verdict.TLE, running_time, hint)
+        return TestResult(Verdict.TLE,
+                          running_time,
+                          get_feedback_message(is_sample, input_data, output, answer, '', '', hint))
     elif is_RTE(status):
-        return TestResult(Verdict.RTE, running_time, f"Exit Code {status}\n{hint}")
+        message = get_feedback_message(is_sample, input_data, output, answer, '', '', hint)
+        return TestResult(Verdict.RTE, running_time, f"#### Exit Code {status}\n{message}")
 
-    answer_filename = test_name.with_suffix('.ans')
-
-    with open(output_filename) as f:
-        output = f.read()
+    output = read_file(output_filename)
 
     output_bytes = output.encode()
     MEBIBYTE = 1024 * 1024
     if len(output_bytes) > config.limits.output * MEBIBYTE:
         return TestResult(Verdict.OLE, running_time)
 
-    test_feedback_dir = tempfile.mkdtemp(prefix='feedback', dir=working_directory)
-    compare_command = ('./default_validator', input_filename, answer_filename, str(test_feedback_dir)) + tuple(config.validator_flags)
+    test_feedback_dir = Path(tempfile.mkdtemp(prefix='feedback', dir=working_directory))
+    compare_command = (
+        './default_validator',
+        input_filename,
+        answer_filename,
+        str(test_feedback_dir)
+    ) + tuple(config.validator_flags)
     compare = subprocess.Popen(compare_command, stdin=subprocess.PIPE, stdout=subprocess.PIPE, encoding='utf8')
     compare.communicate(output)
 
+    judge_message_filename = test_feedback_dir / 'judgemessage.txt'
+    judge_message = read_file(judge_message_filename)
+
+    team_message_filename = test_feedback_dir / 'teammessage.txt'
+    team_message = read_file(team_message_filename)
+
     if compare.returncode == EXIT_WA:
-        return TestResult(Verdict.WA, running_time, hint)
+        return TestResult(Verdict.WA,
+                          running_time,
+                          get_feedback_message(is_sample, input_data, output, answer, judge_message, team_message, hint))
     elif compare.returncode != EXIT_AC:
-        return TestResult(Verdict.JE, running_time, "Something went horribly wrong, please contact the instructor regarding this error")
+        return TestResult(Verdict.JE,
+                          running_time,
+                          "Something went horribly wrong, please contact the instructor regarding this error")
     return TestResult(Verdict.AC, running_time)
 
 def grade_submission(problem, submission):
@@ -161,7 +222,7 @@ def grade_submission(problem, submission):
         {
             "name": "## Compilation",
             "status": "passed" if compile_result[0] else "failed",
-            "output": compile_result[1] or ""
+            "output": f"```\n{compile_result[1]}\n```" if compile_result[1] else ""
         }
     )
 
@@ -169,17 +230,18 @@ def grade_submission(problem, submission):
         samples = [s.with_suffix('') for s in sample.glob('*.in')]
         secrets = [s.with_suffix('') for s in secret.rglob('**/*.in')]
         for i, test in enumerate(sorted(samples) + sorted(secrets), 1):
-            test_result = run_testcase(program, tmpdir, time_limit, config, test)
+            is_sample = i < len(samples)
+            test_result = run_testcase(program, tmpdir, time_limit, config, test, is_sample)
             test_results.append(test_result)
-            if i < len(samples):
-                name = f"### Sample {i} / {len(samples)}"
+            if is_sample:
+                name = f"## Sample {i} / {len(samples)}"
             else:
-                name = f"### Testcase {i - len(samples)} / {len(secrets)}"
+                name = f"## Testcase {i - len(samples)} / {len(secrets)}"
             result["tests"].append(
                 {
                     "name": name,
                     "status": "passed" if test_result.verdict == Verdict.AC else "failed",
-                    "output": str(test_result),
+                    "output": f"### {test_result}",
                 }
             )
             if test_result.verdict != Verdict.AC:
@@ -203,7 +265,7 @@ def grade_submission(problem, submission):
 
     result["output"] = f"# {top_test_result}"
 
-    print(json.dumps(result, indent=4))
+    print(json.dumps(result, indent=4, ensure_ascii=False).encode('utf8').decode())
 
 def find_problem():
     for problem in Path('problems').iterdir():
