@@ -230,7 +230,7 @@ def grade_submission(problem, submission):
         samples = [s.with_suffix('') for s in sample.glob('*.in')]
         secrets = [s.with_suffix('') for s in secret.rglob('**/*.in')]
         for i, test in enumerate(sorted(samples) + sorted(secrets), 1):
-            is_sample = i < len(samples)
+            is_sample = i <= len(samples)
             test_result = run_testcase(program, tmpdir, time_limit, config, test, is_sample)
             test_results.append(test_result)
             if is_sample:
