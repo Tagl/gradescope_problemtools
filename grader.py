@@ -12,7 +12,7 @@ from pathlib import Path
 
 from problemtools.config import ConfigError
 from problemtools.languages import load_language_config
-from problemtools.run import get_program
+from problemtools.run import get_program, BuildRun
 from problemtools.verifyproblem import is_RTE, is_TLE
 from problem_config import load_problem_config
 
@@ -188,7 +188,11 @@ def grade_submission(problem, submission):
     with open(time_limit_file) as f:
         time_limit = float(f.readline())
     program = get_program(submission, LANGUAGES, tmpdir, include)
-    if not config.language_allowed(program.language.lang_id):
+    if program is None:
+        compile_result = (False, "Unable to determine programming language.\n"
+                                 "Ensure your submitted files have the correct file extensions.\n"
+                                 "For example, 'program.py' instead of 'program' for Python 3.")
+    elif not config.language_allowed(program.language.lang_id):
         compile_result = (False, str(UnsupportedLanguage(program.language.lang_id)))
     else:
         compile_result = program.compile()
