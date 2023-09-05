@@ -275,7 +275,12 @@ def grade_submission(problem, submission):
                     "output": f"### {test_result}",
                 }
             )
+
+            # Instructor feedback
+            print(name)
             print(test_result.get_privileged_feedback())
+            print()
+
             if test_result.verdict != Verdict.AC:
                 top_test_result = test_result
                 final_verdict = test_result.verdict
