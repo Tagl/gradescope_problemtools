@@ -54,10 +54,14 @@ def verdict_to_str(verdict):
     assert False
 
 class TestResult:
-    def __init__(self, verdict: Verdict, running_time: float, message: str = ""):
+    def __init__(self, verdict: Verdict, running_time: float, message: str = "", privileged_message: str = ""):
         self.verdict: Verdict = verdict
         self.running_time = running_time
         self.message = message
+        self.privileged_message = privileged_message
+    
+    def get_privileged_feedback(self):
+        return TestResult(self.verdict, self.running_time, self.privileged_message)
 
     def __str__(self):
         if self.message:
@@ -71,7 +75,7 @@ def read_file(path):
             result = f.read()
     return result
 
-def get_feedback_message(show_privileged, input_data, output, answer, judge_message='', team_message='', hint=''):
+def get_feedback_message(show_privileged, input_data, output, answer, judge_message='', team_message='', hint='', desc=''):
     lines = []
     if show_privileged:
         lines.extend([
@@ -94,6 +98,13 @@ def get_feedback_message(show_privileged, input_data, output, answer, judge_mess
                 "#### Validator output:",
                 "```",
                 f"{judge_message}",
+                "```"
+            ])
+        if desc:
+            lines.extend([
+                "#### Testcase description:",
+                "```",
+                f"{desc}",
                 "```"
             ])
     if team_message:
@@ -133,14 +144,24 @@ def run_testcase(program, working_directory, time_limit, config, test_name: Path
 
     hint_filename = test_name.with_suffix('.hint')
     hint = read_file(hint_filename)
+    
+    desc_filename = test_name.with_suffix('.desc')
+    desc = read_file(desc_filename)
 
     if is_TLE(status) or running_time > time_limit:
+        message = get_feedback_message(is_sample, input_data, output, answer, '', '', hint, desc),
+        privileged_message = get_feedback_message(True, input_data, output, answer, '', '', hint, desc),
         return TestResult(Verdict.TLE,
                           running_time,
-                          get_feedback_message(is_sample, input_data, output, answer, '', '', hint))
+                          message,
+                          privileged_message)
     elif is_RTE(status):
-        message = get_feedback_message(is_sample, input_data, output, answer, '', '', hint)
-        return TestResult(Verdict.RTE, running_time, f"#### Exit Code {status}\n{message}")
+        message = get_feedback_message(is_sample, input_data, output, answer, '', '', hint, desc),
+        privileged_message = get_feedback_message(True, input_data, output, answer, '', '', hint, desc),
+        return TestResult(Verdict.RTE,
+                          running_time,
+                          f"#### Exit Code {status}\n{message}",
+                          f"#### Exit Code {status}\n{message}")
 
     output = read_file(output_filename)
 
@@ -166,14 +187,20 @@ def run_testcase(program, working_directory, time_limit, config, test_name: Path
     team_message = read_file(team_message_filename)
 
     if compare.returncode == EXIT_WA:
+        message = get_feedback_message(is_sample, input_data, output, answer, judge_message, team_message, hint, desc)
+        privileged_message = get_feedback_message(True, input_data, output, answer, judge_message, team_message, hint, desc)
         return TestResult(Verdict.WA,
                           running_time,
-                          get_feedback_message(is_sample, input_data, output, answer, judge_message, team_message, hint))
+                          message,
+                          privileged_message)
     elif compare.returncode != EXIT_AC:
+        privileged_message = get_feedback_message(True, input_data, output, answer, judge_message, team_message, hint, desc)
         return TestResult(Verdict.JE,
                           running_time,
-                          "Something went horribly wrong, please contact the instructor regarding this error")
-    return TestResult(Verdict.AC, running_time)
+                          "Something went horribly wrong, please contact the instructor regarding this error",
+                          privileged_message)
+    privileged_message = get_feedback_message(True, input_data, output, answer, judge_message, team_message, hint, desc)
+    return TestResult(Verdict.AC, running_time, "", privileged_message)
 
 def grade_submission(problem, submission):
     time_limit_file = problem / '.timelimit'
@@ -209,7 +236,7 @@ def grade_submission(problem, submission):
         "test_output_format": "md",
         "test_name_format": "md",
         "visibility": "visible",
-        "stdout_visibility": "visible",
+        "stdout_visibility": "hidden",
         "extra_data": {},
         "tests": []
     }
@@ -248,9 +275,11 @@ def grade_submission(problem, submission):
                     "output": f"### {test_result}",
                 }
             )
+            print(test_result.get_privileged_feedback())
             if test_result.verdict != Verdict.AC:
                 top_test_result = test_result
                 final_verdict = test_result.verdict
+
                 break
 
         if not test_results:
@@ -269,7 +298,8 @@ def grade_submission(problem, submission):
 
     result["output"] = f"# {top_test_result}"
 
-    print(json.dumps(result, indent=4, ensure_ascii=False).encode('utf8').decode())
+    with open('/autograder/results/results.json', 'w') as results_file:
+        results_file.write(json.dumps(result, indent=4, ensure_ascii=False).encode('utf8').decode())
 
 def find_problem():
     for problem in Path('problems').iterdir():
