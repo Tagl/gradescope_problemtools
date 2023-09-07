@@ -156,12 +156,12 @@ def run_testcase(program, working_directory, time_limit, config, test_name: Path
                           message,
                           privileged_message)
     elif is_RTE(status):
-        message = get_feedback_message(is_sample, input_data, output, answer, '', '', hint, desc),
-        privileged_message = get_feedback_message(True, input_data, output, answer, '', '', hint, desc),
+        message = get_feedback_message(is_sample, input_data, output, answer, '', '', hint, desc)
+        privileged_message = get_feedback_message(True, input_data, output, answer, '', '', hint, desc)
         return TestResult(Verdict.RTE,
                           running_time,
                           f"#### Exit Code {status}\n{message}",
-                          f"#### Exit Code {status}\n{message}")
+                          f"#### Exit Code {status}\n{privileged_message}")
 
     output = read_file(output_filename)
 
