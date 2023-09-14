@@ -75,7 +75,7 @@ def read_file(path):
             result = f.read()
     return result
 
-def get_feedback_message(show_privileged, input_data, output, answer, judge_message='', team_message='', hint='', desc=''):
+def get_feedback_message(show_privileged, input_data, output, answer, judge_message='', team_message='', hint='', desc='', error=''):
     lines = []
     if show_privileged:
         lines.extend([
@@ -92,6 +92,14 @@ def get_feedback_message(show_privileged, input_data, output, answer, judge_mess
             f"{answer}",
             "```"
         ])
+        
+        if error:
+            lines.extend([
+                "#### Your program's error:"
+                "```",
+                f"{error}",
+                "```"
+            ])
 
         if judge_message:
             lines.extend([
@@ -156,8 +164,8 @@ def run_testcase(program, working_directory, time_limit, config, test_name: Path
                           message,
                           privileged_message)
     elif is_RTE(status):
-        message = get_feedback_message(is_sample, input_data, output, answer, '', '', hint, desc)
-        privileged_message = get_feedback_message(True, input_data, output, answer, '', '', hint, desc)
+        message = get_feedback_message(is_sample, input_data, output, answer, '', '', hint, desc, error)
+        privileged_message = get_feedback_message(True, input_data, output, answer, '', '', hint, desc, error)
         return TestResult(Verdict.RTE,
                           running_time,
                           f"#### Exit Code {status}\n{message}",
