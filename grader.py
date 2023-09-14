@@ -10,7 +10,7 @@ from enum import Enum
 from gradescope_utils.autograder_utils.decorators import weight, tags
 from pathlib import Path
 
-from problemtools.config import ConfigError
+from problemtools.config import ConfigError, load_config
 from problemtools.languages import load_language_config
 from problemtools.run import get_program, BuildRun
 from problemtools.verifyproblem import is_RTE, is_TLE
@@ -75,7 +75,7 @@ def read_file(path):
             result = f.read()
     return result
 
-def get_feedback_message(show_privileged, input_data, output, answer, judge_message='', team_message='', hint='', desc=''):
+def get_feedback_message(show_privileged, input_data, output, answer, judge_message='', team_message='', hint='', desc='', error=''):
     lines = []
     if show_privileged:
         lines.extend([
@@ -156,8 +156,8 @@ def run_testcase(program, working_directory, time_limit, config, test_name: Path
                           message,
                           privileged_message)
     elif is_RTE(status):
-        message = get_feedback_message(is_sample, input_data, output, answer, '', '', hint, desc)
-        privileged_message = get_feedback_message(True, input_data, output, answer, '', '', hint, desc)
+        message = get_feedback_message(is_sample, input_data, output, answer, '', '', hint, desc, error)
+        privileged_message = get_feedback_message(True, input_data, output, answer, '', '', hint, desc, error)
         return TestResult(Verdict.RTE,
                           running_time,
                           f"#### Exit Code {status}\n{message}",
@@ -202,6 +202,48 @@ def run_testcase(program, working_directory, time_limit, config, test_name: Path
     privileged_message = get_feedback_message(True, input_data, output, answer, judge_message, team_message, hint, desc)
     return TestResult(Verdict.AC, running_time, "", privileged_message)
 
+def process_test_group(path: Path, display_prefix, program, tmpdir, config, result, is_sample=False):
+    subgroups = []
+    testcases = []
+
+    for subpath in path.iterdir():
+        if subpath.is_dir():
+            subgroups.append(subpath)
+        elif subpath.suffix == ".in":
+            testcases.append(subpath.with_suffix(''))
+
+    results = []
+    
+    final_result = None
+    for i, test in enumerate(testcases, 1):
+        test_result = run_testcase(program, tmpdir, time_limit, config, test, is_sample)
+        
+        # Instructor feedback
+        print(name)
+        print(test_result.get_privileged_feedback())
+        print()
+
+        name = f"## {display_prefix} {i} / {len(testcases)}"
+        result["tests"].append(
+            {
+                "name": name,
+                "status": "passed" if test_result.verdict == Verdict.AC else "failed",
+                "output": f"### {test_result}",
+            }
+        )
+
+        group_result = aggregate_results(group_result, test_result)
+        if group_result.verdict != Verdict.AC:
+            break
+
+    for subgroup in subgroups:
+        subgroup_result = process_test_group(subgroup, display_prefix, program, tmpdir, config, result, is_sample)
+        group_result = aggregate_results(group_result, subgroup_result)
+        if group_result.verdict != Verdict.AC:
+            break
+
+    return group_result
+
 def grade_submission(problem, submission):
     time_limit_file = problem / '.timelimit'
     include = problem / 'include'
@@ -223,10 +265,6 @@ def grade_submission(problem, submission):
         compile_result = (False, str(UnsupportedLanguage(program.language.lang_id)))
     else:
         compile_result = program.compile()
-
-    final_verdict = Verdict.AC
-    test_results = []
-    highest_running_time = 0.0
 
     result = {
         "score": 0.0,
@@ -256,52 +294,28 @@ def grade_submission(problem, submission):
             "output": f"```\n{compile_result[1]}\n```" if compile_result[1] else ""
         }
     )
+    
+    final_result: TestResult = None
 
     if compile_result[0]:
-        samples = [s.with_suffix('') for s in sample.glob('*.in')]
-        secrets = [s.with_suffix('') for s in secret.rglob('**/*.in')]
-        for i, test in enumerate(sorted(samples) + sorted(secrets), 1):
-            is_sample = i <= len(samples)
-            test_result = run_testcase(program, tmpdir, time_limit, config, test, is_sample)
-            test_results.append(test_result)
-            if is_sample:
-                name = f"## Sample {i} / {len(samples)}"
-            else:
-                name = f"## Testcase {i - len(samples)} / {len(secrets)}"
-            result["tests"].append(
-                {
-                    "name": name,
-                    "status": "passed" if test_result.verdict == Verdict.AC else "failed",
-                    "output": f"### {test_result}",
-                }
-            )
+        sample_result = process_test_group(sample, "Sample", program, tmpdir, config, result, True)
+        final_verdict = aggregate_results(final_result, sample_result)
 
-            # Instructor feedback
-            print(name)
-            print(test_result.get_privileged_feedback())
-            print()
+        if final_result.verdict == Verdict.AC:
+            secret_result = process_test_group(secret, "Testcase", program, tmpdir, config, result)
+            final_verdict = aggregate_results(final_result, secret_result)
 
-            if test_result.verdict != Verdict.AC:
-                top_test_result = test_result
-                final_verdict = test_result.verdict
-
-                break
-
-        if not test_results:
-            final_verdict = Verdict.JE
-        else:
-            highest_running_time = max(test_results, key=lambda x: x.running_time).running_time
-
+        if not final_result:
+            final_result = TestResult(Verdict.JE, 0.0, "Something went wrong. There are no test results to aggregate.")
     else:
         final_verdict = Verdict.CE
         top_test_result = TestResult(final_verdict, 0.0)
 
-    if final_verdict == Verdict.AC:
+    if final_result.verdict == Verdict.AC:
         result["score"] = 100.0
-        result["execution_time"] = sum(x.running_time for x in test_results)
-        top_test_result = max(test_results, key=lambda x: x.running_time)
+        result["execution_time"] = final_result.running_time
 
-    result["output"] = f"# {top_test_result}"
+    result["output"] = f"# {final_result}"
 
     with open('/autograder/results/results.json', 'w') as results_file:
         results_file.write(json.dumps(result, indent=4, ensure_ascii=False).encode('utf8').decode())
