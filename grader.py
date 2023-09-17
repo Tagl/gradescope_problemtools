@@ -68,6 +68,18 @@ class TestResult:
             return f"{verdict_to_str(self.verdict)} ({self.running_time:.4f}s)\n{self.message}"
         return f"{verdict_to_str(self.verdict)} ({self.running_time:.4f}s)"
 
+class TestdataConfig:
+    def __init__(self, **kwargs):
+        self.on_reject = kwargs.get('on_reject', 'break')
+        self.grading = kwargs.get('grading', 'default')
+        self.grader_flags = kwargs.get('grader_flags', '')
+        self.input_validator_flags = kwargs.get('input_validator_flags', '')
+        self.output_validator_flags = kwargs.get('output_validator_flags', '')
+        self.accept_score = int(kwargs.get('accept_score', 1))
+        self.reject_score = int(kwargs.get('reject_score', 0))
+        self.range = kwargs.get('range', '-inf inf')
+        self.min_score, self.max_score = map(float, self.range.split())
+
 def read_file(path):
     result = ''
     if path.exists():
@@ -202,9 +214,19 @@ def run_testcase(program, working_directory, time_limit, config, test_name: Path
     privileged_message = get_feedback_message(True, input_data, output, answer, judge_message, team_message, hint, desc)
     return TestResult(Verdict.AC, running_time, "", privileged_message)
 
+
+
 def process_test_group(path: Path, display_prefix, program, tmpdir, config, result, is_sample=False):
     subgroups = []
     testcases = []
+    testdata_path = path / 'testdata.yaml'
+
+    grading_config = parent_con
+
+    if testdata_path.is_file():
+        pass
+    else:
+        pass
 
     for subpath in path.iterdir():
         if subpath.is_dir():
