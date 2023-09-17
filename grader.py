@@ -61,19 +61,22 @@ class TestResult:
     def __init__(
         self,
         verdict: Verdict,
+        score: int,
         running_time: float,
         message: str = "",
-        privileged_message: str = "",
+        privileged_message: str = ""
     ):
         self.verdict: Verdict = verdict
-        self.running_time = running_time
-        self.message = message
-        self.privileged_message = privileged_message
+        self.score: int = score
+        self.running_time: float = running_time
+        self.message: str = message
+        self.privileged_message: str = privileged_message
 
     def get_privileged_feedback(self):
-        return TestResult(self.verdict, self.running_time, self.privileged_message)
+        return TestResult(self.verdict, self.score, self.running_time, self.privileged_message)
 
     def __str__(self):
+        print(repr(self.running_time))
         if self.message:
             return f"{verdict_to_str(self.verdict)} ({self.running_time:.4f}s)\n{self.message}"
         return f"{verdict_to_str(self.verdict)} ({self.running_time:.4f}s)"
@@ -90,6 +93,15 @@ class TestdataConfig:
         self.reject_score = int(kwargs.get("reject_score", 0))
         self.range = kwargs.get("range", "-inf inf")
         self.min_score, self.max_score = map(float, self.range.split())
+
+
+def load_testdata_config(path: Path, parent_config = None):
+    if path.is_file():
+        with open(path) as f:
+            yaml.safe_load(f)
+    elif parent_config:
+        return parent_config
+    return TestdataConfig()
 
 
 def read_file(path):
@@ -142,7 +154,7 @@ def get_feedback_message(
 
 
 def run_testcase(
-    program, working_directory, time_limit, config, test_name: Path, is_sample=False
+    program, working_directory, time_limit, config, grading_config, test_name: Path, is_sample=False
 ):
     test_name = Path(test_name)
     input_data, output, answer = "", "", ""
@@ -179,7 +191,7 @@ def run_testcase(
         privileged_message = (
             get_feedback_message(True, input_data, output, answer, "", "", hint, desc),
         )
-        return TestResult(Verdict.TLE, running_time, message, privileged_message)
+        return TestResult(Verdict.TLE, grading_config.reject_score, running_time, message, privileged_message)
     elif is_RTE(status):
         message = get_feedback_message(
             is_sample, input_data, output, answer, "", "", hint, desc, error
@@ -189,6 +201,7 @@ def run_testcase(
         )
         return TestResult(
             Verdict.RTE,
+            grading_config.reject_score,
             running_time,
             f"#### Exit Code {status}\n{message}",
             f"#### Exit Code {status}\n{privileged_message}",
@@ -199,7 +212,7 @@ def run_testcase(
     output_bytes = output.encode()
     MEBIBYTE = 1024 * 1024
     if len(output_bytes) > config.limits.output * MEBIBYTE:
-        return TestResult(Verdict.OLE, running_time)
+        return TestResult(Verdict.OLE, grading_config.reject_score, running_time)
 
     test_feedback_dir = Path(tempfile.mkdtemp(prefix="feedback", dir=working_directory))
     compare_command = (
@@ -233,13 +246,14 @@ def run_testcase(
         privileged_message = get_feedback_message(
             True, input_data, output, answer, judge_message, team_message, hint, desc
         )
-        return TestResult(Verdict.WA, running_time, message, privileged_message)
+        return TestResult(Verdict.WA, grading_config.reject_score, running_time, message, privileged_message)
     elif compare.returncode != EXIT_AC:
         privileged_message = get_feedback_message(
             True, input_data, output, answer, judge_message, team_message, hint, desc
         )
         return TestResult(
             Verdict.JE,
+            grading_config.reject_score,
             running_time,
             "Something went horribly wrong, please contact the instructor regarding this error",
             privileged_message,
@@ -247,22 +261,17 @@ def run_testcase(
     privileged_message = get_feedback_message(
         True, input_data, output, answer, judge_message, team_message, hint, desc
     )
-    return TestResult(Verdict.AC, running_time, "", privileged_message)
+    return TestResult(Verdict.AC, grading_config.accept_score, running_time, "", privileged_message)
 
 
 def process_test_group(
-    path: Path, display_prefix, program, tmpdir, config, result, is_sample=False
+    path: Path, display_prefix, program, tmpdir, time_limit, config, parent_config, result, is_sample=False
 ):
     subgroups = []
     testcases = []
     testdata_path = path / "testdata.yaml"
 
-    grading_config = parent_con
-
-    if testdata_path.is_file():
-        pass
-    else:
-        pass
+    grading_config = load_testdata_config(testdata_path, parent_config)
 
     for subpath in path.iterdir():
         if subpath.is_dir():
@@ -274,14 +283,13 @@ def process_test_group(
 
     final_result = None
     for i, test in enumerate(testcases, 1):
-        test_result = run_testcase(program, tmpdir, time_limit, config, test, is_sample)
-
+        test_result = run_testcase(program, tmpdir, time_limit, config, grading_config, test, is_sample)
+        name = f"## {display_prefix} - {i} / {len(testcases)}"
         # Instructor feedback
         print(name)
         print(test_result.get_privileged_feedback())
         print()
 
-        name = f"## {display_prefix} {i} / {len(testcases)}"
         result["tests"].append(
             {
                 "name": name,
@@ -291,15 +299,16 @@ def process_test_group(
         )
 
         group_result = aggregate_results(group_result, test_result)
-        if group_result.verdict != Verdict.AC:
+        if grading_config.on_reject == 'break' and group_result.verdict != Verdict.AC:
             break
 
-    for subgroup in subgroups:
+    for i, subgroup in enumerate(subgroups, 1):
+        subgroup_prefix = "{display_prefix} - Test Group 1"
         subgroup_result = process_test_group(
-            subgroup, display_prefix, program, tmpdir, config, result, is_sample
+            subgroup, subgroup_prefix, program, tmpdir, time_limit, config, grading_config, result, is_sample
         )
         group_result = aggregate_results(group_result, subgroup_result)
-        if group_result.verdict != Verdict.AC:
+        if grading_config.on_reject == 'break' and group_result.verdict != Verdict.AC:
             break
 
     return group_result
@@ -332,7 +341,6 @@ def grade_submission(problem, submission):
 
     result = {
         "score": 0.0,
-        "execution_time": 0.0,
         "output": "",
         "output_format": "md",
         "test_output_format": "md",
@@ -357,17 +365,18 @@ def grade_submission(problem, submission):
 
     final_result: TestResult = None
 
+    grading_config = load_testdata_config(data / "testdata.yaml", None)
     if compile_result[0]:
         sample_result = process_test_group(
-            sample, "Sample", program, tmpdir, config, result, True
+            sample, "Sample", program, tmpdir, time_limit, config, grading_config, result, True
         )
-        final_verdict = aggregate_results(final_result, sample_result)
+        final_result = aggregate_results(final_result, sample_result)
 
         if final_result.verdict == Verdict.AC:
             secret_result = process_test_group(
-                secret, "Testcase", program, tmpdir, config, result
+                secret, "Testcase", program, tmpdir, time_limit, config, grading_config, result
             )
-            final_verdict = aggregate_results(final_result, secret_result)
+            final_result = aggregate_results(final_result, secret_result)
 
         if not final_result:
             final_result = TestResult(
@@ -376,13 +385,12 @@ def grade_submission(problem, submission):
                 "Something went wrong. There are no test results to aggregate.",
             )
     else:
-        final_verdict = Verdict.CE
-        top_test_result = TestResult(final_verdict, 0.0)
+        final_result = TestResult(Verdict.CE, grading_config.reject_score, 0.0)
 
     if final_result.verdict == Verdict.AC:
-        result["score"] = 100.0
         result["execution_time"] = final_result.running_time
 
+    result["score"] = final_result.score
     result["output"] = f"# {final_result}"
 
     with open("/autograder/results/results.json", "w") as results_file:
