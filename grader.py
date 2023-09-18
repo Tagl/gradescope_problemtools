@@ -53,7 +53,7 @@ class Verdict(Enum):
         return NotImplemented
 
 VerdictAggregation = Enum("VerdictAggregation", ["WORST_ERROR", "FIRST_ERROR", "ALWAYS_ACCEPT"])
-ScoreAggregation = Enum("ScoreAggregation", ["SUM", "MAX"])
+ScoreAggregation = Enum("ScoreAggregation", ["SUM", "MIN"])
 
 
 def verdict_to_str(verdict):
@@ -93,7 +93,6 @@ class TestResult:
         return TestResult(self.verdict, self.score, self.running_time, self.privileged_message)
 
     def __str__(self):
-        print(repr(self.running_time))
         if self.message:
             return f"{verdict_to_str(self.verdict)} ({self.running_time:.4f}s)\n{self.message}"
         return f"{verdict_to_str(self.verdict)} ({self.running_time:.4f}s)"
@@ -118,8 +117,8 @@ class TestdataConfig:
         else:
             self.verdict_aggregation = VerdictAggregation.WORST_ERROR
 
-        if "max" in flags:
-            self.score_aggregation = ScoreAggregation.MAX
+        if "min" in flags:
+            self.score_aggregation = ScoreAggregation.MIN
         else:
             self.score_aggregation = ScoreAggregation.SUM
 
@@ -142,8 +141,8 @@ def aggregate_results(config: TestdataConfig, results: List[TestResult]):
 
     score = config.reject_score
     if verdict == Verdict.AC:
-        if config.score_aggregation == ScoreAggregation.MAX:
-            score = max(result.score for result in results)
+        if config.score_aggregation == ScoreAggregation.MIN:
+            score = min(result.score for result in results)
         else:
             score = sum(result.score for result in results)
 
@@ -154,7 +153,7 @@ def aggregate_results(config: TestdataConfig, results: List[TestResult]):
 def load_testdata_config(path: Path, parent_config = None):
     if path.is_file():
         with open(path) as f:
-            yaml.safe_load(f)
+            return TestdataConfig(**yaml.safe_load(f))
     elif parent_config:
         return parent_config
     return TestdataConfig()
@@ -167,6 +166,10 @@ def read_file(path):
             result = f.read()
     return result
 
+def truncate_string(s, n):
+    if len(s) > n:
+        return f"{s[:n]}... (string truncated)"
+    return s
 
 def get_feedback_message(
     show_privileged,
@@ -180,20 +183,21 @@ def get_feedback_message(
     error="",
 ):
     lines = []
+    max_length = 10**3
     if show_privileged:
         lines.extend(
             [
                 "#### Input:",
                 "```",
-                f"{input_data}",
+                f"{truncate_string(input_data, max_length)}",
                 "```",
                 "#### Your program's output:",
                 "```",
-                f"{output}",
+                f"{truncate_string(output, max_length)}",
                 "```",
                 "#### Correct output:",
                 "```",
-                f"{answer}",
+                f"{truncate_string(answer, max_length)}",
                 "```",
             ]
         )
@@ -330,7 +334,7 @@ def process_test_group(
 
     grading_config = load_testdata_config(testdata_path, parent_config)
 
-    for subpath in path.iterdir():
+    for subpath in sorted(path.iterdir()):
         if subpath.is_dir():
             subgroups.append(subpath)
         elif subpath.suffix == ".in":
@@ -358,23 +362,26 @@ def process_test_group(
             break
     else:
         for i, subgroup in enumerate(subgroups, 1):
-            subgroup_prefix = "{display_prefix} - Test Group {i}"
+            subgroup_prefix = f"{display_prefix} - Test Group {i}"
             subgroup_result = process_test_group(
                 subgroup, subgroup_prefix, program, tmpdir, time_limit, config, grading_config, result, is_sample
             )
-
 
             group_results.append(subgroup_result)
             if grading_config.on_reject == 'break' and subgroup_result.verdict != Verdict.AC:
                 break
     
     group_result = aggregate_results(grading_config, group_results)
-            
+    
+    name =  f"## {display_prefix} ({group_result.score:.2f} / {grading_config.max_score:.2f})"
+    print(name)
+    print(group_result.get_privileged_feedback())
+    print()
     result["tests"].append(
         {
-            "name": f"## {display_prefix}",
+            "name": name,
             "status": "passed" if abs(group_result.score - grading_config.max_score) < EPS else "failed",
-            "output": f"### {test_result}",
+            "output": f"### {group_result}",
         }
     )
 
@@ -431,7 +438,7 @@ def grade_submission(problem, submission):
     final_result: TestResult = None
 
     grading_config = load_testdata_config(data / "testdata.yaml", None)
-
+    
     if compile_result[0]:
         test_results = []
         sample_result = process_test_group(
