@@ -9,6 +9,7 @@ import yaml
 from enum import Enum
 from gradescope_utils.autograder_utils.decorators import weight, tags
 from pathlib import Path
+from typing import List
 
 from problemtools.config import ConfigError, load_config
 from problemtools.languages import load_language_config
@@ -26,6 +27,7 @@ SUBMISSION_DIR = Path("/autograder/submission")
 EXIT_AC = 42
 EXIT_WA = 43
 LANGUAGES = load_language_config()
+EPS = 1e-9
 
 
 class UnsupportedLanguage(Exception):
@@ -36,7 +38,22 @@ class UnsupportedLanguage(Exception):
         return "Unsupported programming language {}".format(self.lang)
 
 
-Verdict = Enum("Verdict", ["JE", "CE", "RTE", "TLE", "OLE", "WA", "AC"])
+class Verdict(Enum):
+    AC = 0
+    WA = 1
+    OLE = 2
+    TLE = 3
+    RTE = 4
+    CE = 5
+    JE = 6
+
+    def __lt__(self, other):
+        if self.__class__ is other.__class__:
+            return self.value < other.value
+        return NotImplemented
+
+VerdictAggregation = Enum("VerdictAggregation", ["WORST_ERROR", "FIRST_ERROR", "ALWAYS_ACCEPT"])
+ScoreAggregation = Enum("ScoreAggregation", ["SUM", "MAX"])
 
 
 def verdict_to_str(verdict):
@@ -81,7 +98,6 @@ class TestResult:
             return f"{verdict_to_str(self.verdict)} ({self.running_time:.4f}s)\n{self.message}"
         return f"{verdict_to_str(self.verdict)} ({self.running_time:.4f}s)"
 
-
 class TestdataConfig:
     def __init__(self, **kwargs):
         self.on_reject = kwargs.get("on_reject", "break")
@@ -93,6 +109,46 @@ class TestdataConfig:
         self.reject_score = int(kwargs.get("reject_score", 0))
         self.range = kwargs.get("range", "-inf inf")
         self.min_score, self.max_score = map(float, self.range.split())
+        
+        flags = self.grader_flags.split()
+        if "always_accept" in flags:
+            self.verdict_aggregation = VerdictAggregation.ALWAYS_ACCEPT
+        elif "first_error" in flags:
+            self.verdict_aggregation = VerdictAggregation.FIRST_ERROR
+        else:
+            self.verdict_aggregation = VerdictAggregation.WORST_ERROR
+
+        if "max" in flags:
+            self.score_aggregation = ScoreAggregation.MAX
+        else:
+            self.score_aggregation = ScoreAggregation.SUM
+
+        self.ignore_sample = "ignore_sample" in flags
+        self.accept_if_any_accepted = "accept_if_any_accepted" in flags
+        
+
+def aggregate_results(config: TestdataConfig, results: List[TestResult]):
+    if not results:
+        return TestResult(Verdict.JE, config.reject_score, 0.0, "Something went wrong. There are no test results to aggregate.")
+    verdict = None
+    if config.accept_if_any_accepted and any(result.verdict == Verdict.AC for result in results):
+        verdict = Verdict.AC
+    elif config.verdict_aggregation == VerdictAggregation.FIRST_ERROR:
+        verdict = next((result.verdict for result in results if result.verdict != Verdict.AC), Verdict.AC)
+    elif config.verdict_aggregation == VerdictAggregation.WORST_ERROR:
+        verdict = max(result.verdict for result in results)
+    else:
+        verdict = Verdict.AC
+
+    score = config.reject_score
+    if verdict == Verdict.AC:
+        if config.score_aggregation == ScoreAggregation.MAX:
+            score = max(result.score for result in results)
+        else:
+            score = sum(result.score for result in results)
+
+    return TestResult(verdict, score, max(result.running_time for result in results))
+
 
 
 def load_testdata_config(path: Path, parent_config = None):
@@ -193,6 +249,7 @@ def run_testcase(
         )
         return TestResult(Verdict.TLE, grading_config.reject_score, running_time, message, privileged_message)
     elif is_RTE(status):
+        error = read_file(error_filename)
         message = get_feedback_message(
             is_sample, input_data, output, answer, "", "", hint, desc, error
         )
@@ -281,7 +338,7 @@ def process_test_group(
 
     results = []
 
-    final_result = None
+    group_results = []
     for i, test in enumerate(testcases, 1):
         test_result = run_testcase(program, tmpdir, time_limit, config, grading_config, test, is_sample)
         name = f"## {display_prefix} - {i} / {len(testcases)}"
@@ -289,7 +346,6 @@ def process_test_group(
         print(name)
         print(test_result.get_privileged_feedback())
         print()
-
         result["tests"].append(
             {
                 "name": name,
@@ -297,19 +353,30 @@ def process_test_group(
                 "output": f"### {test_result}",
             }
         )
-
-        group_result = aggregate_results(group_result, test_result)
-        if grading_config.on_reject == 'break' and group_result.verdict != Verdict.AC:
+        group_results.append(test_result)
+        if grading_config.on_reject == 'break' and test_result.verdict != Verdict.AC:
             break
+    else:
+        for i, subgroup in enumerate(subgroups, 1):
+            subgroup_prefix = "{display_prefix} - Test Group {i}"
+            subgroup_result = process_test_group(
+                subgroup, subgroup_prefix, program, tmpdir, time_limit, config, grading_config, result, is_sample
+            )
 
-    for i, subgroup in enumerate(subgroups, 1):
-        subgroup_prefix = "{display_prefix} - Test Group 1"
-        subgroup_result = process_test_group(
-            subgroup, subgroup_prefix, program, tmpdir, time_limit, config, grading_config, result, is_sample
-        )
-        group_result = aggregate_results(group_result, subgroup_result)
-        if grading_config.on_reject == 'break' and group_result.verdict != Verdict.AC:
-            break
+
+            group_results.append(subgroup_result)
+            if grading_config.on_reject == 'break' and subgroup_result.verdict != Verdict.AC:
+                break
+    
+    group_result = aggregate_results(grading_config, group_results)
+            
+    result["tests"].append(
+        {
+            "name": f"## {display_prefix}",
+            "status": "passed" if abs(group_result.score - grading_config.max_score) < EPS else "failed",
+            "output": f"### {test_result}",
+        }
+    )
 
     return group_result
 
@@ -340,8 +407,6 @@ def grade_submission(problem, submission):
         compile_result = program.compile()
 
     result = {
-        "score": 0.0,
-        "output": "",
         "output_format": "md",
         "test_output_format": "md",
         "test_name_format": "md",
@@ -366,31 +431,39 @@ def grade_submission(problem, submission):
     final_result: TestResult = None
 
     grading_config = load_testdata_config(data / "testdata.yaml", None)
+
     if compile_result[0]:
+        test_results = []
         sample_result = process_test_group(
-            sample, "Sample", program, tmpdir, time_limit, config, grading_config, result, True
+            sample, "Sample testcases", program, tmpdir, time_limit, config, grading_config, result, True
         )
-        final_result = aggregate_results(final_result, sample_result)
-
-        if final_result.verdict == Verdict.AC:
+        
+        run_secret = True
+        if not grading_config.ignore_sample:
+            test_results.append(sample_result)
+            if sample_result.verdict != Verdict.AC and grading_config.on_reject == 'break':
+                run_secret = False
+        
+        if run_secret:
             secret_result = process_test_group(
-                secret, "Testcase", program, tmpdir, time_limit, config, grading_config, result
+                secret, "Secret testcases", program, tmpdir, time_limit, config, grading_config, result
             )
-            final_result = aggregate_results(final_result, secret_result)
-
-        if not final_result:
-            final_result = TestResult(
-                Verdict.JE,
-                0.0,
-                "Something went wrong. There are no test results to aggregate.",
-            )
+            test_results.append(secret_result)
+        
+        final_result = aggregate_results(grading_config, test_results)
     else:
         final_result = TestResult(Verdict.CE, grading_config.reject_score, 0.0)
 
     if final_result.verdict == Verdict.AC:
         result["execution_time"] = final_result.running_time
 
-    result["score"] = final_result.score
+    if config.type == 'scoring':
+        result["score"] = final_result.score
+        result["max_score"] = grading_config.max_score
+    else:
+        result["score"] = 100.0 if final_result.verdict == Verdict.AC else 0.0
+        result["max_score"] = 100.0
+
     result["output"] = f"# {final_result}"
 
     with open("/autograder/results/results.json", "w") as results_file:
