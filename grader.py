@@ -95,7 +95,7 @@ def get_feedback_message(show_privileged, input_data, output, answer, judge_mess
         
         if error:
             lines.extend([
-                "#### Your program's error:"
+                "#### Your program's error:",
                 "```",
                 f"{error}",
                 "```"
