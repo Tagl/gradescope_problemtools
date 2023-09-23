@@ -181,7 +181,6 @@ def read_file(path):
             result = f.read()
     return result
 
-
 def truncate_string(s, n):
     if len(s) > n:
         return f"{s[:n]}... (string truncated)"
@@ -200,24 +199,30 @@ def get_feedback_message(
     error="",
 ):
     lines = []
-    max_length = 10**3
+    max_length = 5*10**3
     if show_privileged:
-        lines.extend(
-            [
-                "#### Input:",
+        lines.extend([
+            "#### Input:",
+            "```",
+            f"{truncate_string(input_data, max_length)}",
+            "```",
+            "#### Your program's output:",
+            "```",
+            f"{truncate_string(output, max_length)}",
+            "```",
+            "#### Correct output:",
+            "```",
+            f"{truncate_string(answer, max_length)}",
+            "```"
+        ])
+        
+        if error:
+            lines.extend([
+                "#### Your program's error:",
                 "```",
-                f"{truncate_string(input_data, max_length)}",
-                "```",
-                "#### Your program's output:",
-                "```",
-                f"{truncate_string(output, max_length)}",
-                "```",
-                "#### Correct output:",
-                "```",
-                f"{truncate_string(answer, max_length)}",
-                "```",
-            ]
-        )
+                f"{truncate_string(error, max_length)}",
+                "```"
+            ])
 
         if judge_message:
             lines.extend(["#### Validator output:", "```", f"{judge_message}", "```"])
