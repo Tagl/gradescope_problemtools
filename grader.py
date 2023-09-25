@@ -262,6 +262,7 @@ def run_testcase(
         errfile=str(error_filename),
         timelim=int(time_limit + 1.999),
         memlim=config.limits.memory,
+        set_work_dir=True,
     )
 
     hint_filename = test_name.with_suffix(".hint")
@@ -501,7 +502,7 @@ def grade_submission(problem, submission):
     )
 
     final_result: TestResult = None
-
+?!?jedi=0, ?!?                                         (param path: Path, *_*param parent_config=None*_*) ?!?jedi?!?
     grading_config = load_testdata_config(data / "testdata.yaml", None)
 
     if compile_result[0]:
