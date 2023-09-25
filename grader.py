@@ -502,7 +502,7 @@ def grade_submission(problem, submission):
     )
 
     final_result: TestResult = None
-?!?jedi=0, ?!?                                         (param path: Path, *_*param parent_config=None*_*) ?!?jedi?!?
+    
     grading_config = load_testdata_config(data / "testdata.yaml", None)
 
     if compile_result[0]:
