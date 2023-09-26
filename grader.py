@@ -104,7 +104,7 @@ class TestResult:
 
 
 class TestdataConfig:
-    def __init__(self, **kwargs):
+    def __init__(self, problem_config, **kwargs):
         self.on_reject = kwargs.get("on_reject", "break")
         self.grading = kwargs.get("grading", "default")
         self.grader_flags = kwargs.get("grader_flags", "")
@@ -112,7 +112,7 @@ class TestdataConfig:
         self.output_validator_flags = kwargs.get("output_validator_flags", "")
         self.accept_score = int(kwargs.get("accept_score", 1))
         self.reject_score = int(kwargs.get("reject_score", 0))
-        self.range = kwargs.get("range", "-inf inf")
+        self.range = kwargs.get("range", "-inf inf" if problem_config.type == "scoring" else "0 1")
         self.min_score, self.max_score = map(float, self.range.split())
 
         flags = self.grader_flags.split()
@@ -123,7 +123,7 @@ class TestdataConfig:
         else:
             self.verdict_aggregation = VerdictAggregation.WORST_ERROR
 
-        if "min" in flags:
+        if "min" in flags or problem_config.type == "pass-fail":
             self.score_aggregation = ScoreAggregation.MIN
         else:
             self.score_aggregation = ScoreAggregation.SUM
@@ -165,13 +165,13 @@ def aggregate_results(config: TestdataConfig, results: List[TestResult]):
     return TestResult(verdict, score, max(result.running_time for result in results))
 
 
-def load_testdata_config(path: Path, parent_config=None):
+def load_testdata_config(path: Path, problem_config, parent_config=None):
     if path.is_file():
         with open(path) as f:
-            return TestdataConfig(**yaml.safe_load(f))
+            return TestdataConfig(problem_config, **yaml.safe_load(f))
     elif parent_config:
         return parent_config
-    return TestdataConfig()
+    return TestdataConfig(problem_config)
 
 
 def read_file(path):
@@ -383,7 +383,7 @@ def process_test_group(
     testcases = []
     testdata_path = path / "testdata.yaml"
 
-    grading_config = load_testdata_config(testdata_path, parent_config)
+    grading_config = load_testdata_config(testdata_path, config, parent_config)
 
     for subpath in sorted(path.iterdir()):
         if subpath.is_dir():
@@ -503,7 +503,7 @@ def grade_submission(problem, submission):
 
     final_result: TestResult = None
     
-    grading_config = load_testdata_config(data / "testdata.yaml", None)
+    grading_config = load_testdata_config(data / "testdata.yaml", config, None)
 
     if compile_result[0]:
         test_results = []
