@@ -245,7 +245,6 @@ def run_testcase(
     is_sample=False,
 ):
     test_name = Path(test_name)
-    input_data, output, answer = "", "", ""
 
     input_filename = test_name.with_suffix(".in")
     input_data = read_file(input_filename)
@@ -271,6 +270,8 @@ def run_testcase(
     desc_filename = test_name.with_suffix(".desc")
     desc = read_file(desc_filename)
 
+    output = read_file(output_filename)
+
     if is_TLE(status) or running_time > time_limit:
         message = (
             get_feedback_message(
@@ -287,7 +288,7 @@ def run_testcase(
             message,
             privileged_message,
         )
-    elif is_RTE(status):
+    if is_RTE(status):
         error = read_file(error_filename)
         message = get_feedback_message(
             is_sample, input_data, output, answer, "", "", hint, desc, error
@@ -302,8 +303,6 @@ def run_testcase(
             f"#### Exit Code {status}\n{message}",
             f"#### Exit Code {status}\n{privileged_message}",
         )
-
-    output = read_file(output_filename)
 
     output_bytes = output.encode()
     MEBIBYTE = 1024 * 1024
