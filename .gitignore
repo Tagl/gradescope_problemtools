@@ -3,7 +3,6 @@ feedback/
 problems/
 autograder/
 autograder.zip
-default_validator
 
 # Byte-compiled / optimized / DLL files
 __pycache__/

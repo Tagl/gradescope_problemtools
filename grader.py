@@ -141,6 +141,7 @@ def aggregate_results(config: TestdataConfig, results: List[TestResult]):
             "Something went wrong. There are no test results to aggregate.",
         )
     verdict = None
+    results = [result for result in results if result is not None]
     if config.accept_if_any_accepted and any(
         result.verdict == Verdict.AC for result in results
     ):
@@ -175,7 +176,7 @@ def load_testdata_config(path: Path, problem_config, parent_config=None):
 
 
 def read_file(path):
-    result = ""
+    result = None
     if path.exists():
         with open(path) as f:
             result = f.read()
@@ -215,7 +216,7 @@ def get_feedback_message(
             f"{truncate_string(answer, max_length)}",
             "```"
         ])
-        
+
         if error:
             lines.extend([
                 "#### Your program's error:",
@@ -237,6 +238,7 @@ def get_feedback_message(
 
 def run_testcase(
     program,
+    validator,
     working_directory,
     time_limit,
     config,
@@ -273,14 +275,8 @@ def run_testcase(
     output = read_file(output_filename)
 
     if is_TLE(status) or running_time > time_limit:
-        message = (
-            get_feedback_message(
-                is_sample, input_data, output, answer, "", "", hint, desc
-            ),
-        )
-        privileged_message = (
-            get_feedback_message(True, input_data, output, answer, "", "", hint, desc),
-        )
+        message = get_feedback_message(is_sample, input_data, output, answer, "", "", hint, desc)
+        privileged_message = get_feedback_message(True, input_data, output, answer, "", "", hint, desc)
         return TestResult(
             Verdict.TLE,
             grading_config.reject_score,
@@ -311,11 +307,12 @@ def run_testcase(
 
     test_feedback_dir = Path(tempfile.mkdtemp(prefix="feedback", dir=working_directory))
     compare_command = (
-        "./default_validator",
+        *validator.get_runcmd(),
         input_filename,
         answer_filename,
         str(test_feedback_dir),
-    ) + tuple(config.validator_flags)
+        *config.validator_flags
+    )
     compare = subprocess.Popen(
         compare_command, stdin=subprocess.PIPE, stdout=subprocess.PIPE, encoding="utf8"
     )
@@ -362,8 +359,14 @@ def run_testcase(
     privileged_message = get_feedback_message(
         True, input_data, output, answer, judge_message, team_message, hint, desc
     )
+
+    final_score = grading_config.accept_score
+    score_filename = test_feedback_dir / "score.txt"
+    score_contents = read_file(score_filename)
+    if score_contents is not None:
+        final_score = float(score_contents)
     return TestResult(
-        Verdict.AC, grading_config.accept_score, running_time, "", privileged_message
+        Verdict.AC, final_score, running_time, "", privileged_message
     )
 
 
@@ -371,6 +374,7 @@ def process_test_group(
     path: Path,
     display_prefix,
     program,
+    validator,
     tmpdir,
     time_limit,
     config,
@@ -378,6 +382,10 @@ def process_test_group(
     result,
     is_sample=False,
 ):
+    if not path.exists():
+        # Ignore result
+        return None
+
     subgroups = []
     testcases = []
     testdata_path = path / "testdata.yaml"
@@ -395,7 +403,7 @@ def process_test_group(
     group_results = []
     for i, test in enumerate(testcases, 1):
         test_result = run_testcase(
-            program, tmpdir, time_limit, config, grading_config, test, is_sample
+            program, validator, tmpdir, time_limit, config, grading_config, test, is_sample
         )
         name = f"## {display_prefix} - {i} / {len(testcases)}"
         # Instructor feedback
@@ -419,6 +427,7 @@ def process_test_group(
                 subgroup,
                 subgroup_prefix,
                 program,
+                validator,
                 tmpdir,
                 time_limit,
                 config,
@@ -453,6 +462,22 @@ def process_test_group(
     return group_result
 
 
+def prepare_program(config, program_path, tmpdir, include=None):
+    program = get_program(str(program_path), LANGUAGES, str(tmpdir), str(include))
+    if program is None:
+        compile_result = (
+            False,
+            "Unable to determine programming language.\n"
+            "Ensure your submitted files have the correct file extensions.\n"
+            "For example, 'program.py' instead of 'program' for Python 3.",
+        )
+    elif not config.language_allowed(program.language.lang_id):
+        compile_result = (False, str(UnsupportedLanguage(program.language.lang_id)))
+    else:
+        compile_result = program.compile()
+    return program, compile_result
+
+
 def grade_submission(problem, submission):
     time_limit_file = problem / ".timelimit"
     include = problem / "include"
@@ -465,18 +490,14 @@ def grade_submission(problem, submission):
     config = load_problem_config(problem_yaml)
     with open(time_limit_file) as f:
         time_limit = float(f.readline())
-    program = get_program(submission, LANGUAGES, tmpdir, include)
-    if program is None:
-        compile_result = (
-            False,
-            "Unable to determine programming language.\n"
-            "Ensure your submitted files have the correct file extensions.\n"
-            "For example, 'program.py' instead of 'program' for Python 3.",
-        )
-    elif not config.language_allowed(program.language.lang_id):
-        compile_result = (False, str(UnsupportedLanguage(program.language.lang_id)))
+    program, compile_result = prepare_program(config, submission, tmpdir, include)
+
+    if config.validation == "default":
+        output_validator, validator_compile_result = prepare_program(config, 'default_validator', tmpdir)
     else:
-        compile_result = program.compile()
+        output_validators = problem / "output_validators"
+        validator_path = next(output_validators.iterdir())
+        output_validator, validator_compile_result = prepare_program(config, validator_path, tmpdir)
 
     result = {
         "output_format": "md",
@@ -501,15 +522,17 @@ def grade_submission(problem, submission):
     )
 
     final_result: TestResult = None
-    
+
     grading_config = load_testdata_config(data / "testdata.yaml", config, None)
 
     if compile_result[0]:
         test_results = []
+
         sample_result = process_test_group(
             sample,
             "Sample testcases",
             program,
+            output_validator,
             tmpdir,
             time_limit,
             config,
@@ -522,7 +545,8 @@ def grade_submission(problem, submission):
         if not grading_config.ignore_sample:
             test_results.append(sample_result)
             if (
-                sample_result.verdict != Verdict.AC
+                sample_result is not None
+                and sample_result.verdict != Verdict.AC
                 and grading_config.on_reject == "break"
             ):
                 run_secret = False
@@ -532,6 +556,7 @@ def grade_submission(problem, submission):
                 secret,
                 "Secret testcases",
                 program,
+                output_validator,
                 tmpdir,
                 time_limit,
                 config,
