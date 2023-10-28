@@ -24,6 +24,7 @@ class Limits:
         lines.append(f"- Compilation Time Limit: {self.compilation_time} seconds")
         return '\n'.join(lines)
 
+
 class ProblemConfig:
     def __init__(self, *, name, **kwargs):
         self.name = name
@@ -32,6 +33,7 @@ class ProblemConfig:
         self.author = kwargs.get('author', "")
         self.source = kwargs.get('source', "")
         self.type = kwargs.get('type', 'pass-fail')
+        self.validation = kwargs.get('validation', 'default')
         validator_flags = kwargs.get('validator_flags', "")
         output_validator_flags = kwargs.get('output_validator_flags', "")
         if validator_flags is None:
