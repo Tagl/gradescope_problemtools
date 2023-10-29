@@ -311,7 +311,8 @@ def run_testcase(
         input_filename,
         answer_filename,
         str(test_feedback_dir),
-        *config.validator_flags
+        *config.validator_flags,
+        *grading_config.output_validator_flags.split()
     )
     compare = subprocess.Popen(
         compare_command, stdin=subprocess.PIPE, stdout=subprocess.PIPE, encoding="utf8"
