@@ -410,7 +410,7 @@ def process_test_group(
         test_result = run_testcase(
             program, validator, tmpdir, time_limit, config, grading_config, test, is_sample
         )
-        name = f"## {display_prefix} - {i} / {len(testcases)}"
+        name = f"## {display_prefix} - {i} / {len(testcases)} ({test_result.score:.2f} / {grading_config.max_score:.2f})"
         # Instructor feedback
         print(name)
         print(test_result.get_privileged_feedback())
