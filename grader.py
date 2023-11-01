@@ -384,7 +384,7 @@ def process_test_group(
     is_sample=False,
 ):
     if not path.exists():
-        # Ignore result
+        # Ignore result if path doesn't exist
         return None
 
     subgroups = []
@@ -398,6 +398,10 @@ def process_test_group(
             subgroups.append(subpath)
         elif subpath.suffix == ".in":
             testcases.append(subpath.with_suffix(""))
+
+    if not (subgroups or testcases):
+        # Ignore empty directories
+        return None
 
     results = []
 
