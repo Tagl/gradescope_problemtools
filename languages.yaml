@@ -254,3 +254,10 @@ scala:
     files: '*.sc *.scala'
     compile: '/usr/bin/scalac -encoding UTF-8 -sourcepath {path} -d {path} {files}'
     run: '/usr/bin/scala -J-Xmx{memlim}m -classpath {path} {mainclass}'
+
+scheme:
+    name: 'Scheme'
+    priority: 549
+    files: '*.scm *.rkt'
+    compile: '/usr/bin/csc -I {path} -o {binary} {files}'
+    run: '{binary}'
