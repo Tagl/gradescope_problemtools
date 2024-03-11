@@ -6,6 +6,7 @@ PROBLEMSDIR="/autograder/source/problems"
 pushd "$MAINDIR"
 apt-get install -y \
         automake \
+        chicken-bin \
         g++ \
         git \
         libboost-all-dev \
