@@ -25,7 +25,7 @@ apt-get install -y \
         tidy \
         vim
 
-pip3 install git+https://github.com/Tagl/problemtools
+pip3 install git+https://github.com/Tagl/problemtools@gradescope_problemtools
 pip3 install -r requirements.txt
 
 g++ -O3 -o default_validator default_validator.cpp
