@@ -28,12 +28,11 @@ apt-get install -y \
 wget -O mlton.tgz https://altushost-swe.dl.sourceforge.net/project/mlton/mlton/20210117/mlton-20210117-1.amd64-linux-glibc2.31.tgz
 mkdir mlton
 tar -xf mlton.tgz --strip-components=1 -C ./mlton
-ls -al
 for f in ./mlton/bin/*; do
-    cp "$f" /usr/bin/
+    cp -r "$f" /usr/bin/
 done
 for f in ./mlton/lib/*; do
-    cp "$f" /usr/lib/
+    cp -r "$f" /usr/lib/
 done
 
 pip3 install git+https://github.com/Tagl/problemtools@gradescope_autograder
