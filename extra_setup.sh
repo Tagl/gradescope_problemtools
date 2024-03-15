@@ -46,7 +46,8 @@ if [ -d "$PROBLEMSDIR" ]; then
         [ -d "$problemdir" ] || continue
         pushd "$problemdir"
         echo "Determining time limit..."
-        verifyproblem . -p submissions | grep "setting timelim to" | cut -d ' ' -f 11 > .timelimit
+        verifyproblem . -p submissions | tee verifyoutput 
+        cat verifyoutput | grep "setting timelim to" | cut -d ' ' -f 11 > .timelimit
         echo -n "Time limit in seconds set to: "
         cat .timelimit
         popd
