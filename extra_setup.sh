@@ -26,7 +26,8 @@ apt-get install -y \
         vim
 
 wget -O mlton.tgz https://altushost-swe.dl.sourceforge.net/project/mlton/mlton/20210117/mlton-20210117-1.amd64-linux-glibc2.31.tgz
-tar -xf mlton.tgz
+mkdir mlton
+tar -xf mlton.tgz --strip-components=1 -C ./mlton
 ls -al
 for f in ./mlton/bin/*; do
     cp "$f" /usr/bin/
