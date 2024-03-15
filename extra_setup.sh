@@ -25,6 +25,15 @@ apt-get install -y \
         tidy \
         vim
 
+wget -O mlton.tgz https://altushost-swe.dl.sourceforge.net/project/mlton/mlton/20210117/mlton-20210117-1.amd64-linux-glibc2.31.tgz
+tar -xf mlton.tgz
+for f in ./mlton/bin/*; do
+    cp "$f" /usr/bin/
+done
+for f in ./mlton/lib/*; do
+    cp "$f" /usr/lib/
+done
+
 pip3 install git+https://github.com/Tagl/problemtools@gradescope_autograder
 pip3 install -r requirements.txt
 
