@@ -18,6 +18,7 @@ apt-get install -y \
         python3-pip \
         python3-plastex \
         python3-yaml \
+        swi-prolog \
         texlive-fonts-recommended \
         texlive-lang-cyrillic \
         texlive-latex-extra \
