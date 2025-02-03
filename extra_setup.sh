@@ -14,6 +14,7 @@ apt-get install -y \
         libgmp10 \
         libgmpxx4ldbl \
         openjdk-11-jdk \
+        pypy3 \
         python3-minimal \
         python3-pip \
         python3-plastex \
@@ -25,6 +26,8 @@ apt-get install -y \
         texlive-plain-generic \
         tidy \
         vim
+
+
 
 wget -O mlton.tgz https://altushost-swe.dl.sourceforge.net/project/mlton/mlton/20210117/mlton-20210117-1.amd64-linux-glibc2.31.tgz
 mkdir mlton
